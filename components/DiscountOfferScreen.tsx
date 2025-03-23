@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Image,
   Dimensions,
   Platform,
@@ -89,11 +88,11 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
     ? ['#0a0d45', '#1a1464', '#261b81'] as const
     : ['#0a0d45', '#1a1464', '#261b81'] as const;
 
+  // Removed "Create your own chatbots" and shortened the descriptions
   const benefits = [
     { icon: 'infinite-outline', text: 'Unlimited answers' },
     { icon: 'people-outline', text: 'Access 1000+ AI Characters' },
-    { icon: 'create-outline', text: 'Create your own chatbots' },
-    { icon: 'flash-outline', text: 'Powered by ChatGPT and GPT-4' },
+    { icon: 'flash-outline', text: 'Powered by latest GPT models' },
   ];
 
   return (
@@ -121,11 +120,8 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
           </Animated.View>
         )}
 
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.contentContainer}>
+        <View style={styles.contentContainer}>
+          <View style={styles.topSection}>
             <View style={styles.discountBadgeContainer}>
               <LinearGradient
                 colors={['#FF6B6B', '#FF8E53']}
@@ -141,66 +137,66 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
             </View>
 
             <Text style={styles.featuresTitle}>Limited Time Premium Access</Text>
-            
-            <View style={styles.timerContainer}>
-              <Text style={styles.timerLabel}>Your offer expires in</Text>
-              <View style={styles.timerRow}>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{minutes.toString().padStart(2, '0').charAt(0)}</Text>
-                </View>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{minutes.toString().padStart(2, '0').charAt(1)}</Text>
-                </View>
-                <Text style={styles.timerSeparator}>:</Text>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{seconds.toString().padStart(2, '0').charAt(0)}</Text>
-                </View>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{seconds.toString().padStart(2, '0').charAt(1)}</Text>
-                </View>
+          </View>
+          
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerLabel}>Your offer expires in</Text>
+            <View style={styles.timerRow}>
+              <View style={styles.timerBox}>
+                <Text style={styles.timerDigit}>{minutes.toString().padStart(2, '0').charAt(0)}</Text>
+              </View>
+              <View style={styles.timerBox}>
+                <Text style={styles.timerDigit}>{minutes.toString().padStart(2, '0').charAt(1)}</Text>
+              </View>
+              <Text style={styles.timerSeparator}>:</Text>
+              <View style={styles.timerBox}>
+                <Text style={styles.timerDigit}>{seconds.toString().padStart(2, '0').charAt(0)}</Text>
+              </View>
+              <View style={styles.timerBox}>
+                <Text style={styles.timerDigit}>{seconds.toString().padStart(2, '0').charAt(1)}</Text>
               </View>
             </View>
+          </View>
 
-            <View style={styles.benefitsContainer}>
-              {benefits.map((benefit, index) => (
-                <View key={index} style={styles.benefitItem}>
-                  <LinearGradient
-                    colors={['#4CAF50', '#2E7D32']}
-                    style={styles.checkCircle}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <Ionicons name="checkmark" size={18} color="white" />
-                  </LinearGradient>
-                  <Text style={styles.benefitText}>{benefit.text}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity 
-                style={styles.redeemButton} 
-                onPress={handleRedeemOffer}
-                activeOpacity={0.8}
-              >
+          <View style={styles.benefitsContainer}>
+            {benefits.map((benefit, index) => (
+              <View key={index} style={styles.benefitItem}>
                 <LinearGradient
                   colors={['#4CAF50', '#2E7D32']}
+                  style={styles.checkCircle}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.redeemGradient}
                 >
-                  <Text style={styles.redeemButtonText}>Redeem Offer</Text>
-                  <Ionicons name="arrow-forward" size={20} color="white" style={styles.redeemIcon} />
+                  <Ionicons name="checkmark" size={18} color="white" />
                 </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                <Text style={styles.benefitText}>{benefit.text}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.bottomSection}>
+            <TouchableOpacity 
+              style={styles.redeemButton} 
+              onPress={handleRedeemOffer}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#4CAF50', '#2E7D32']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.redeemGradient}
+              >
+                <Text style={styles.redeemButtonText}>Redeem Offer</Text>
+                <Ionicons name="arrow-forward" size={20} color="white" style={styles.redeemIcon} />
+              </LinearGradient>
+            </TouchableOpacity>
 
             <View style={styles.priceContainer}>
               <Text style={styles.originalPrice}>$49.99</Text>
               <Text style={styles.discountedPrice}>$29.99/year. Cancel anytime</Text>
             </View>
           </View>
-        </ScrollView>
+        </View>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -214,27 +210,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-  },
   contentContainer: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    justifyContent: 'space-between',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 16,
+  },
+  topSection: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  bottomSection: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 10,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 20 : 40,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 10 : 15,
+    paddingBottom: 10,
   },
   headerTextContainer: {
     flex: 1,
   },
   offerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-condensed',
@@ -263,7 +267,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   discountBadgeContainer: {
-    marginVertical: 20,
+    marginTop: Platform.OS === 'ios' ? 10 : 5,
+    marginBottom: 10,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -272,14 +277,14 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   discountBadge: {
-    borderRadius: 75,
-    padding: 5,
+    borderRadius: 60,
+    padding: 4,
     transform: [{ rotate: '-5deg' }],
   },
   discountInner: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -287,7 +292,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   discountText: {
-    fontSize: 60,
+    fontSize: 48,
     fontWeight: 'bold',
     color: 'white',
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Black' : 'sans-serif-black',
@@ -296,31 +301,30 @@ const styles = StyleSheet.create({
     textShadowRadius: 5,
   },
   discountSubtext: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: 'white',
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-condensed',
     letterSpacing: 2,
   },
   featuresTitle: {
-    fontSize: 26,
+    fontSize: 22,
     color: 'white',
     textAlign: 'center',
-    marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 5,
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif-medium',
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   timerContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 10,
     width: '100%',
   },
   timerLabel: {
-    fontSize: 18,
+    fontSize: 16,
     color: 'white',
-    marginBottom: 12,
+    marginBottom: 8,
     fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
     opacity: 0.9,
   },
@@ -331,12 +335,12 @@ const styles = StyleSheet.create({
   },
   timerBox: {
     backgroundColor: 'rgba(55, 91, 210, 0.8)',
-    width: 56,
-    height: 80,
+    width: 45,
+    height: 65,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
-    margin: 5,
+    borderRadius: 10,
+    margin: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -344,73 +348,69 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   timerDigit: {
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: 'bold',
     color: 'white',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   timerSeparator: {
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: 'bold',
     color: 'white',
-    marginHorizontal: 5,
+    marginHorizontal: 4,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   benefitsContainer: {
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 20,
-    padding: 20,
-    marginVertical: 20,
+    borderRadius: 16,
+    padding: 15,
     width: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 8,
+    elevation: 6,
   },
   benefitItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   checkCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   benefitText: {
-    fontSize: 18,
+    fontSize: 16,
     color: 'white',
     flex: 1,
     fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
     fontWeight: '500',
   },
-  buttonContainer: {
-    width: '100%',
-    marginVertical: 15,
-  },
   redeemButton: {
     width: '100%',
-    borderRadius: 40,
+    borderRadius: 30,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowRadius: 10,
     elevation: 8,
+    marginBottom: 10,
   },
   redeemGradient: {
-    paddingVertical: 20,
-    borderRadius: 40,
+    paddingVertical: 16,
+    borderRadius: 30,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   redeemButtonText: {
     color: 'white',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Heavy' : 'sans-serif-medium',
     letterSpacing: 0.5,
@@ -420,19 +420,18 @@ const styles = StyleSheet.create({
   },
   priceContainer: {
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 30,
+    marginTop: 5,
   },
   originalPrice: {
-    fontSize: 20,
+    fontSize: 18,
     color: 'white',
     textDecorationLine: 'line-through',
     opacity: 0.7,
     fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
-    marginBottom: 5,
+    marginBottom: 2,
   },
   discountedPrice: {
-    fontSize: 24,
+    fontSize: 20,
     color: 'white',
     fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Avenir-Medium' : 'sans-serif-medium',
