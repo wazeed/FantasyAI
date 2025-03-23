@@ -52,6 +52,7 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
 
     // Show close button after 15 seconds
     const closeButtonTimer = setTimeout(() => {
+      console.log('15 seconds passed, showing close button');
       setShowCloseButton(true);
       Animated.timing(closeButtonOpacity, {
         toValue: 1,
@@ -59,6 +60,20 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
         useNativeDriver: true,
       }).start();
     }, 15000);
+
+    // For testing - show close button immediately in development
+    if (__DEV__) {
+      console.log('Development mode: Close button will appear in 5 seconds');
+      setTimeout(() => {
+        console.log('DEV: Showing close button');
+        setShowCloseButton(true);
+        Animated.timing(closeButtonOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }, 5000);
+    }
 
     return () => {
       clearInterval(timer);
@@ -116,7 +131,7 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
         {showCloseButton && (
           <Animated.View style={[styles.closeButtonContainer, { opacity: closeButtonOpacity }]}>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={textColor} />
+              <Ionicons name="close" size={26} color="white" />
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -249,15 +264,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Platform.OS === 'ios' ? 50 : 40,
     right: 20,
-    zIndex: 10,
+    zIndex: 100,
   },
   closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   discountBadgeContainer: {
     marginTop: Platform.OS === 'ios' ? 10 : 5,
