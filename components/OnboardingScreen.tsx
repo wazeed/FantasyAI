@@ -376,7 +376,7 @@ const OnboardingScreen: React.FC = () => {
                 style={styles.gradientButton}
               >
                 <Text style={styles.nextButtonText}>
-                  Next
+                  Continue
                 </Text>
                 <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
               </LinearGradient>
@@ -396,19 +396,6 @@ const OnboardingScreen: React.FC = () => {
           colors={getBackgroundGradient()}
           style={styles.gradientBackground}
         >
-          <View style={styles.headerContainer}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleBack}
-            >
-              <Ionicons 
-                name="chevron-back" 
-                size={28} 
-                color={isDarkMode ? "#FFFFFF" : "#000000"} 
-              />
-            </TouchableOpacity>
-          </View>
-          
           <Animated.View 
             style={[
               styles.giftContainer,
@@ -471,9 +458,9 @@ const OnboardingScreen: React.FC = () => {
                 style={styles.gradientButton}
               >
                 <Text style={styles.nextButtonText}>
-                  Claim Gift
+                  Continue
                 </Text>
-                <Ionicons name="gift-outline" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
+                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
@@ -491,19 +478,6 @@ const OnboardingScreen: React.FC = () => {
           colors={getBackgroundGradient()}
           style={styles.gradientBackground}
         >
-          <View style={styles.headerContainer}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleBack}
-            >
-              <Ionicons 
-                name="chevron-back" 
-                size={28} 
-                color={isDarkMode ? "#FFFFFF" : "#000000"} 
-              />
-            </TouchableOpacity>
-          </View>
-          
           <Animated.View 
             style={[
               styles.giftContainer,
@@ -605,19 +579,6 @@ const OnboardingScreen: React.FC = () => {
           colors={getBackgroundGradient()}
           style={styles.gradientBackground}
         >
-          <View style={styles.headerContainer}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleBack}
-            >
-              <Ionicons 
-                name="chevron-back" 
-                size={28} 
-                color={isDarkMode ? "#FFFFFF" : "#000000"} 
-              />
-            </TouchableOpacity>
-          </View>
-          
           <Animated.View 
             style={[
               styles.giftContainer,
@@ -689,19 +650,6 @@ const OnboardingScreen: React.FC = () => {
           colors={getBackgroundGradient()}
           style={styles.gradientBackground}
         >
-          <View style={styles.headerContainer}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleBack}
-            >
-              <Ionicons 
-                name="chevron-back" 
-                size={28} 
-                color={isDarkMode ? "#FFFFFF" : "#000000"} 
-              />
-            </TouchableOpacity>
-          </View>
-          
           <Animated.View 
             style={[
               styles.giftContainer,
@@ -804,6 +752,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
   },
   headerContainer: {
     width: '100%',
@@ -983,8 +932,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
     paddingHorizontal: 20,
-    paddingTop: 0,
-    paddingBottom: 20,
+    paddingTop: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
   },
   giftDescription: {
     fontSize: 18,
@@ -1062,7 +1011,7 @@ const styles = StyleSheet.create({
   },
   creditCounter: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 16,
     width: '100%',
   },
   creditCounterBg: {
@@ -1090,7 +1039,7 @@ const styles = StyleSheet.create({
   },
   creditFeatures: {
     width: '100%',
-    marginBottom: 30,
+    marginBottom: 20,
     padding: 20,
     borderRadius: 20,
     shadowColor: '#000',
@@ -1111,7 +1060,7 @@ const styles = StyleSheet.create({
   },
   ratingContainer: {
     flexDirection: 'row',
-    marginVertical: 36,
+    marginVertical: 24,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -1174,6 +1123,11 @@ const styles = StyleSheet.create({
   },
   lightGuestText: {
     color: '#555555',
+  },
+  buttonContainer: {
+    width: '100%',
+    paddingVertical: 10,
+    marginTop: 'auto',
   },
 });
 

@@ -240,29 +240,8 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
   const shouldShowDiscountOffer = async (): Promise<boolean> => {
     if (!isGuest) return false
     
-    try {
-      // Get the last shown date from storage
-      const lastShownDate = lastDiscountOfferDate || await AsyncStorage.getItem(DISCOUNT_OFFER_LAST_SHOWN_KEY)
-      
-      if (!lastShownDate) {
-        // If never shown before, show it
-        return true
-      }
-      
-      // Check if the last shown date is today
-      const today = new Date().toISOString().split('T')[0]
-      if (lastShownDate !== today) {
-        // If not shown today, show it
-        return true
-      }
-      
-      // Already shown today
-      return false
-      
-    } catch (error) {
-      console.error('Error checking if discount offer should be shown:', error)
-      return false
-    }
+    // Always show discount offer for guest users
+    return true;
   }
   
   // Function to mark that the discount offer has been shown today

@@ -177,21 +177,23 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
               ))}
             </View>
 
-            <TouchableOpacity 
-              style={styles.redeemButton} 
-              onPress={handleRedeemOffer}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#4CAF50', '#2E7D32']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.redeemGradient}
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity 
+                style={styles.redeemButton} 
+                onPress={handleRedeemOffer}
+                activeOpacity={0.8}
               >
-                <Text style={styles.redeemButtonText}>Redeem Offer</Text>
-                <Ionicons name="arrow-forward" size={20} color="white" style={styles.redeemIcon} />
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#4CAF50', '#2E7D32']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.redeemGradient}
+                >
+                  <Text style={styles.redeemButtonText}>Redeem Offer</Text>
+                  <Ionicons name="arrow-forward" size={20} color="white" style={styles.redeemIcon} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.priceContainer}>
               <Text style={styles.originalPrice}>$49.99</Text>
@@ -214,7 +216,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
   },
   contentContainer: {
     alignItems: 'center',
@@ -358,7 +360,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
     borderRadius: 20,
     padding: 20,
-    marginVertical: 30,
+    marginVertical: 20,
     width: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -386,10 +388,13 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Avenir' : 'sans-serif',
     fontWeight: '500',
   },
+  buttonContainer: {
+    width: '100%',
+    marginVertical: 15,
+  },
   redeemButton: {
     width: '100%',
     borderRadius: 40,
-    marginVertical: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,

@@ -382,7 +382,7 @@ const Navigation = () => {
             animation: 'fade',
           }}
         >
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         </Stack.Navigator>
       ) : (
         <Stack.Navigator 
