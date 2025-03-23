@@ -101,22 +101,50 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <LinearGradient 
+      colors={['#121212', '#1E1E1E']} 
+      style={styles.container}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+    >
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.contentContainer}>
+          {/* Header Section */}
           <Animated.View 
             style={[
-              styles.mainContent,
+              styles.headerContent,
               { 
                 opacity: fadeAnim,
                 transform: [{ translateY: slideAnim }]
               }
             ]}
           >
-            {/* Greeting */}
-            <Text style={styles.greeting}>Hi!</Text>
-            
+            <Image 
+              source={require('../assets/logo.png')} 
+              style={styles.logo} 
+              resizeMode="contain"
+            />
+            <Text style={styles.greeting}>Welcome to FantasyAI</Text>
+            <Text style={styles.subGreeting}>Chat with your favorite characters</Text>
+          </Animated.View>
+
+          {/* Error message */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+          
+          {/* Footer with buttons */}
+          <Animated.View 
+            style={[
+              styles.footerContent,
+              { 
+                opacity: fadeAnim
+              }
+            ]}
+          >
             {/* Social sign-in buttons */}
             <TouchableOpacity 
               style={styles.socialButton}
@@ -157,18 +185,6 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.socialButtonText}>Continue with Email</Text>
             </TouchableOpacity>
             
-            {/* Sign up link */}
-            <View style={styles.signupContainer}>
-              <Text style={styles.signupText}>
-                Don't have an account? <Text style={styles.signupLink} onPress={navigateToSignUp}>Sign up</Text>
-              </Text>
-            </View>
-            
-            {/* Forgot password link */}
-            <TouchableOpacity style={styles.forgotPasswordContainer}>
-              <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
-            </TouchableOpacity>
-            
             {/* Guest mode button */}
             <TouchableOpacity 
               style={styles.guestButton}
@@ -182,15 +198,22 @@ export default function LoginScreen({ navigation }) {
               )}
             </TouchableOpacity>
             
-            {error && (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
+            {/* Sign up and forgot password links */}
+            <View style={styles.linksContainer}>
+              <TouchableOpacity onPress={navigateToSignUp}>
+                <Text style={styles.signupLink}>Sign up</Text>
+              </TouchableOpacity>
+              
+              <Text style={styles.linkSeparator}>•</Text>
+              
+              <TouchableOpacity>
+                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         </View>
       </SafeAreaView>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -205,25 +228,46 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     paddingHorizontal: 20,
+    justifyContent: 'space-between',
   },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
+  headerContent: {
+    alignItems: 'center',
+    marginTop: height * 0.1,
+  },
+  logo: {
+    width: width * 0.4,
+    height: width * 0.4,
+    marginBottom: 20,
   },
   greeting: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 30,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  subGreeting: {
+    fontSize: 16,
+    color: '#BBBBBB',
+    textAlign: 'center',
+  },
+  footerContent: {
+    marginBottom: Platform.OS === 'ios' ? 30 : 20,
+    width: '100%',
   },
   socialButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 15,
+    padding: 16,
     marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   socialIcon: {
     marginRight: 10,
@@ -237,41 +281,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: '#4CAF50',
-    borderRadius: 10,
-    padding: 15,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 8,
+    marginBottom: 24,
   },
   guestButtonText: {
     color: '#4CAF50',
     fontSize: 16,
     fontWeight: '500',
   },
-  signupContainer: {
-    marginTop: 20,
+  linksContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-  },
-  signupText: {
-    color: '#FFFFFF',
-    fontSize: 14,
   },
   signupLink: {
     color: '#4CAF50',
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  forgotPasswordContainer: {
-    marginTop: 15,
-    alignItems: 'center',
+  linkSeparator: {
+    color: '#BBBBBB',
+    marginHorizontal: 10,
+    fontSize: 10,
   },
   forgotPasswordText: {
     color: '#4CAF50',
     fontSize: 14,
   },
   errorContainer: {
-    marginTop: 20,
+    margin: 20,
     padding: 10,
     backgroundColor: 'rgba(255, 0, 0, 0.1)',
-    borderRadius: 5,
+    borderRadius: 8,
   },
   errorText: {
     color: '#FF3B30',
