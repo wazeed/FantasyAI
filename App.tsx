@@ -40,6 +40,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ThemeProvider, ThemeContext } from './contexts/ThemeContext';
 import SubscriptionScreen from './components/SubscriptionScreen';
 import SubscriptionOfferScreen from './components/SubscriptionOfferScreen';
+import DiscountOfferScreen from './components/DiscountOfferScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -61,6 +62,7 @@ type RootStackParamList = {
   ContactUs: undefined;
   SubscriptionScreen: { isSpecialOffer?: boolean };
   SubscriptionOfferScreen: undefined;
+  DiscountOfferScreen: { fromCharacter?: boolean };
 };
 
 type MainTabsParamList = {
@@ -355,11 +357,6 @@ const Navigation = () => {
     headerTintColor: theme.colors.text,
     headerShadowVisible: false, // Remove the bottom border
     headerBackTitleVisible: false, // iOS only: hide the back button title
-    headerLeft: ({ tintColor }) => (
-      <TouchableOpacity style={{ paddingHorizontal: 10 }}>
-        <Ionicons name="chevron-back" size={24} color={tintColor} />
-      </TouchableOpacity>
-    ),
   };
 
   return (
@@ -504,6 +501,11 @@ const Navigation = () => {
           <Stack.Screen 
             name="SubscriptionOfferScreen" 
             component={SubscriptionOfferScreen} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="DiscountOfferScreen" 
+            component={DiscountOfferScreen} 
             options={{ headerShown: false }} 
           />
         </Stack.Navigator>

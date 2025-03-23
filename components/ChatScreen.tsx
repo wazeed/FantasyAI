@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -81,9 +81,11 @@ export default function ChatScreen({ route }) {
   const navigation = useNavigation<NavigationProp>();
   const [selectedTheme, setSelectedTheme] = useState(CHAT_THEMES[0]);
   const [showThemeSelector, setShowThemeSelector] = useState(false);
-  const messageAnimations = useRef(new Map()).current;
   const [conversationId, setConversationId] = useState<string | null>(existingConversationId || null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  // Initialize animation values for messages
+  const [messageAnimations, setMessageAnimations] = useState(new Map());
 
   // Dynamic colors based on theme
   const colors = {
@@ -457,57 +459,100 @@ export default function ChatScreen({ route }) {
     }
   };
   
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+  // Function to render a message with animation
+  const renderMessage = useCallback(({ item }) => {
     const isUser = item.sender === 'user';
-    const isLastMessage = index === messages.length - 1;
-    const animations = messageAnimations.get(item.id);
+    
+    // Initialize animation values if they don't exist for this message
+    if (!messageAnimations.has(item.id)) {
+      const fadeAnim = new Animated.Value(0);
+      const slideAnim = new Animated.Value(50);
+      messageAnimations.set(item.id, { fadeAnim, slideAnim });
+      
+      // Start animation
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    // Get animation values
+    const messageAnimation = messageAnimations.get(item.id) || { fadeAnim: new Animated.Value(1), slideAnim: new Animated.Value(0) };
+    
+    // Format timestamp for display
+    const messageDate = new Date(item.timestamp);
+    const formattedTime = messageDate.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
     
     return (
       <Animated.View
+        key={item.id}
         style={[
-          styles.messageContainer,
+          styles.messageBubbleContainer,
           isUser ? styles.userMessageContainer : styles.aiMessageContainer,
-          animations && {
-            opacity: animations.fadeAnim,
-            transform: [{ translateX: animations.slideAnim }],
+          {
+            opacity: messageAnimation.fadeAnim,
+            transform: [{ translateY: messageAnimation.slideAnim }],
           },
         ]}
       >
         {!isUser && (
-          <Image 
-            source={character.avatar} 
-            style={styles.avatarImage}
+          <Image
+            source={typeof character.image === 'number' ? character.image : { uri: character.image }}
+            style={styles.messageBubbleAvatar}
           />
         )}
         
         <View
           style={[
             styles.messageBubble,
-            isUser ? styles.userMessageBubble : styles.aiMessageBubble,
-            { backgroundColor: isUser ? colors.primary : colors.card }
+            isUser ? styles.userMessageBubbleContainer : styles.aiMessageBubbleContainer,
           ]}
         >
-          <Text 
+          <Text
             style={[
-              styles.messageText,
-              { color: isUser ? '#FFFFFF' : colors.text }
+              styles.messageBubbleText,
+              isUser
+                ? (isDarkMode ? styles.darkUserMessageText : styles.lightUserMessageText)
+                : (isDarkMode ? styles.darkAiMessageText : styles.lightAiMessageText)
             ]}
           >
             {item.text}
           </Text>
-          <Text style={[styles.timestampText, { color: isUser ? 'rgba(255,255,255,0.7)' : colors.subText }]}>
-            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+
+          <Text
+            style={[
+              styles.messageBubbleTime,
+              isUser
+                ? (isDarkMode ? styles.darkUserTimeText : styles.lightUserTimeText)
+                : (isDarkMode ? styles.darkAiTimeText : styles.lightAiTimeText)
+            ]}
+          >
+            {formattedTime}
           </Text>
         </View>
-        
+
         {isUser && (
-          <View style={[styles.userAvatar, { backgroundColor: colors.accent }]}>
-            <Text style={styles.userAvatarText}>You</Text>
-          </View>
+          <Ionicons
+            name="person-circle"
+            size={30}
+            color={colors.userIconColor}
+            style={styles.messageBubbleAvatar}
+          />
         )}
       </Animated.View>
     );
-  };
+  }, [isDarkMode, character, messageAnimations, colors]);
 
   const handleBack = () => {
     navigation.goBack();
@@ -565,21 +610,6 @@ export default function ChatScreen({ route }) {
         style={styles.container}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <View style={[styles.header, { backgroundColor: colors.card }]}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerInfo}>
-            <Image source={character.avatar} style={styles.avatar} />
-            <Text style={[styles.characterName, { color: colors.text }]}>{character.name}</Text>
-          </View>
-
-          <TouchableOpacity onPress={() => setShowThemeSelector(true)} style={styles.menuButton}>
-            <Ionicons name="color-palette" size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-
         <ImageBackground
           source={selectedTheme.background}
           style={styles.chatContainer}
@@ -655,31 +685,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
   backButton: {
     padding: 8,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    borderRadius: 20,
+    marginRight: 5,
   },
   headerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 12,
   },
   characterName: {
-    color: '#fff',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  menuButton: {
+    padding: 8,
+    borderRadius: 20,
+    marginLeft: 5,
   },
   placeholder: {
     width: 40,
@@ -794,17 +827,13 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontWeight: 'bold',
   },
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   chatContainer: {
     flex: 1,
   },
   backgroundImage: {
-    opacity: 0.15,
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
   },
   themeModal: {
     position: 'absolute',
@@ -853,5 +882,503 @@ const styles = StyleSheet.create({
   themeName: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  messageRow: {
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    maxWidth: '90%',
+  },
+  userMessageRow: {
+    alignSelf: 'flex-end',
+    marginLeft: 'auto',
+  },
+  aiMessageRow: {
+    alignSelf: 'flex-start',
+    marginRight: 'auto',
+  },
+  messageBubbleAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  userAvatarPlaceholder: {
+    width: 36,
+    marginLeft: 8,
+  },
+  messageBubble: {
+    padding: 12,
+    borderRadius: 20,
+    maxWidth: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  userMessageBubble: {
+    borderTopRightRadius: 4,
+    marginLeft: 'auto',
+  },
+  aiMessageBubble: {
+    borderTopLeftRadius: 4,
+    marginRight: 'auto',
+  },
+  darkUserBubble: {
+    backgroundColor: '#3B82F6',
+  },
+  lightUserBubble: {
+    backgroundColor: '#3B82F6',
+  },
+  darkAiBubble: {
+    backgroundColor: '#2A2A2A',
+  },
+  lightAiBubble: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  darkUserBubbleText: {
+    color: '#FFFFFF',
+  },
+  lightUserBubbleText: {
+    color: '#FFFFFF',
+  },
+  darkAiBubbleText: {
+    color: '#FFFFFF',
+  },
+  lightAiBubbleText: {
+    color: '#1F2937',
+  },
+  messageTime: {
+    fontSize: 11,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  darkUserTimeText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  lightUserTimeText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  darkAiTimeText: {
+    color: '#9CA3AF',
+  },
+  lightAiTimeText: {
+    color: '#6B7280',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginLeft: 46,
+  },
+  typingText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+  },
+  darkInputContainer: {
+    backgroundColor: '#1F1F1F',
+    borderTopColor: '#333',
+  },
+  lightInputContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopColor: '#E5E7EB',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#374151',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginRight: 8,
+    fontSize: 16,
+    maxHeight: 120,
+  },
+  darkInput: {
+    backgroundColor: '#2A2A2A',
+    color: '#FFFFFF',
+  },
+  lightInput: {
+    backgroundColor: '#F3F4F6',
+    color: '#1F2937',
+  },
+  sendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3D8CFF',
+  },
+  disabledSendButton: {
+    opacity: 0.5,
+  },
+  inputActions: {
+    flexDirection: 'row',
+    padding: 8,
+  },
+  inputActionButton: {
+    padding: 8,
+    marginHorizontal: 4,
+  },
+  subscriptionPromptContainer: {
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  darkSubscriptionPrompt: {
+    backgroundColor: '#2A2A2A',
+  },
+  lightSubscriptionPrompt: {
+    backgroundColor: '#F3F4F6',
+  },
+  subscriptionPromptTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subscriptionPromptText: {
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  subscribeButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#3D8CFF',
+  },
+  subscribeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  themeSelectorContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: isDarkMode => isDarkMode ? '#1F1F1F' : '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: isDarkMode => isDarkMode ? '#333' : '#E5E7EB',
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  themeSelectorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  themesList: {
+    marginBottom: 16,
+  },
+  themeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  darkThemeItem: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3A3A3A',
+  },
+  lightThemeItem: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  selectedThemeItem: {
+    borderColor: '#3D8CFF',
+    borderWidth: 2,
+  },
+  themePreview: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: isDarkMode => isDarkMode ? '#3A3A3A' : '#E5E7EB',
+    overflow: 'hidden',
+  },
+  defaultThemePreview: {
+    backgroundColor: isDarkMode => isDarkMode ? '#121212' : '#F9FAFB',
+  },
+  themeItemInfo: {
+    flex: 1,
+  },
+  themeItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  closeButton: {
+    alignSelf: 'center',
+    marginTop: 8,
+    padding: 12,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3D8CFF',
+  },
+  avatarContainer: {
+    width: 40,
+    height: 40,
+    marginHorizontal: 8,
+    justifyContent: 'flex-end',
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  messageBubble: {
+    maxWidth: '70%',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  userMessageBubble: {
+    borderTopRightRadius: 4,
+    marginLeft: 40,
+  },
+  aiMessageBubble: {
+    borderTopLeftRadius: 4,
+    marginRight: 40,
+  },
+  darkUserBubble: {
+    backgroundColor: '#3D8CFF',
+  },
+  darkAiBubble: {
+    backgroundColor: '#2A2A2A',
+  },
+  lightUserBubble: {
+    backgroundColor: '#7E3AF2',
+  },
+  lightAiBubble: {
+    backgroundColor: '#F0F0F0',
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  darkMessageText: {
+    color: '#FFFFFF',
+  },
+  lightMessageText: {
+    color: '#000000',
+  },
+  messageTime: {
+    fontSize: 11,
+    alignSelf: 'flex-end',
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  darkUserTimeText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  lightUserTimeText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  darkAiTimeText: {
+    color: '#9CA3AF',
+  },
+  lightAiTimeText: {
+    color: '#6B7280',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginLeft: 46,
+  },
+  typingText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+  },
+  darkInputContainer: {
+    backgroundColor: '#1F1F1F',
+    borderTopColor: '#333',
+  },
+  lightInputContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopColor: '#E5E7EB',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#374151',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginRight: 8,
+    fontSize: 16,
+    maxHeight: 120,
+  },
+  darkInput: {
+    backgroundColor: '#2A2A2A',
+    color: '#FFFFFF',
+  },
+  lightInput: {
+    backgroundColor: '#F3F4F6',
+    color: '#1F2937',
+  },
+  sendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3D8CFF',
+  },
+  disabledSendButton: {
+    opacity: 0.5,
+  },
+  inputActions: {
+    flexDirection: 'row',
+    padding: 8,
+  },
+  inputActionButton: {
+    padding: 8,
+    marginHorizontal: 4,
+  },
+  subscriptionPromptContainer: {
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  darkSubscriptionPrompt: {
+    backgroundColor: '#2A2A2A',
+  },
+  lightSubscriptionPrompt: {
+    backgroundColor: '#F3F4F6',
+  },
+  subscriptionPromptTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subscriptionPromptText: {
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  subscribeButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#3D8CFF',
+  },
+  subscribeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  themeSelectorContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: isDarkMode => isDarkMode ? '#1F1F1F' : '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: isDarkMode => isDarkMode ? '#333' : '#E5E7EB',
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  themeSelectorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  themesList: {
+    marginBottom: 16,
+  },
+  themeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  darkThemeItem: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3A3A3A',
+  },
+  lightThemeItem: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  selectedThemeItem: {
+    borderColor: '#3D8CFF',
+    borderWidth: 2,
+  },
+  themePreview: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: isDarkMode => isDarkMode ? '#3A3A3A' : '#E5E7EB',
+    overflow: 'hidden',
+  },
+  defaultThemePreview: {
+    backgroundColor: isDarkMode => isDarkMode ? '#121212' : '#F9FAFB',
+  },
+  themeItemInfo: {
+    flex: 1,
+  },
+  themeItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  closeButton: {
+    alignSelf: 'center',
+    marginTop: 8,
+    padding: 12,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3D8CFF',
   },
 }); 

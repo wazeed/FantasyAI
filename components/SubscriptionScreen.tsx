@@ -15,11 +15,19 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
-const SubscriptionScreen = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
+type SubscriptionScreenProps = {
+  route?: {
+    params?: {
+      isSpecialOffer?: boolean;
+      returnToCharacter?: any;
+    };
+  };
+};
+
+const SubscriptionScreen = ({ route }: SubscriptionScreenProps) => {
+  const navigation = useNavigation<any>();
   const { isDarkMode } = useContext(ThemeContext);
-  const isSpecialOffer = route.params?.isSpecialOffer || false;
+  const { isSpecialOffer, returnToCharacter } = route?.params || { isSpecialOffer: false };
   
   // State
   const [isFreeTrial, setIsFreeTrial] = useState(true);
@@ -38,7 +46,12 @@ const SubscriptionScreen = () => {
   };
 
   const handleClose = () => {
-    navigation.goBack();
+    if (returnToCharacter) {
+      // Navigate to chat with the character
+      navigation.navigate('Chat', { character: returnToCharacter });
+    } else {
+      navigation.goBack();
+    }
   };
 
   const handleRestorePurchase = () => {
@@ -46,11 +59,24 @@ const SubscriptionScreen = () => {
     // Implement actual restore logic here
   };
 
-  const handleContinue = () => {
+  const handleSubscribe = (planId) => {
+    // Here would be code to handle subscription logic
     Alert.alert(
-      'Subscription Activated',
-      `You've successfully subscribed to the ${selectedPlan === 'yearly' ? 'Yearly' : 'Weekly'} plan${isFreeTrial ? ' with a 7-day free trial' : ''}.`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
+      "Subscription Success",
+      "You have successfully subscribed to the premium plan!",
+      [
+        {
+          text: "Continue",
+          onPress: () => {
+            if (returnToCharacter) {
+              // Navigate to chat with the character
+              navigation.navigate('Chat', { character: returnToCharacter });
+            } else {
+              navigation.navigate('MainTabs');
+            }
+          }
+        }
+      ]
     );
   };
 
@@ -212,7 +238,7 @@ const SubscriptionScreen = () => {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
+        <TouchableOpacity style={styles.continueButton} onPress={() => handleSubscribe(selectedPlan)}>
           <Text style={styles.continueButtonText}>
             {isFreeTrial ? 'Start Free Trial' : 'Continue'}
           </Text>

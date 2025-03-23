@@ -7,6 +7,12 @@ import { Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 
+// Constants for guest message tracking
+const GUEST_MESSAGE_COUNT_KEY = 'guest_message_count'
+const OFFER_THRESHOLD = 3 // Show offer after this many messages
+const OFFER_SHOWN_KEY = 'subscription_offer_shown'
+const DISCOUNT_OFFER_LAST_SHOWN_KEY = 'discount_offer_last_shown_date'
+
 type AuthContextType = {
   user: User | null
   session: Session | null
@@ -22,14 +28,11 @@ type AuthContextType = {
   skipAuth: () => void
   incrementGuestMessageCount: () => Promise<void>
   shouldShowSubscriptionOffer: () => Promise<boolean>
+  shouldShowDiscountOffer: () => Promise<boolean>
+  markDiscountOfferShown: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-// Constants for guest message tracking
-const GUEST_MESSAGE_COUNT_KEY = 'guest_message_count'
-const OFFER_THRESHOLD = 3 // Show offer after this many messages
-const OFFER_SHOWN_KEY = 'subscription_offer_shown'
 
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
@@ -38,6 +41,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
   const [isGuest, setIsGuest] = useState(false)
   const [guestMessageCount, setGuestMessageCount] = useState<number>(0)
   const [offerShown, setOfferShown] = useState(false)
+  const [lastDiscountOfferDate, setLastDiscountOfferDate] = useState<string | null>(null)
 
   useEffect(() => {
     // Get initial session
@@ -83,6 +87,10 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
           // Load if offer has been shown
           const offerShownString = await AsyncStorage.getItem(OFFER_SHOWN_KEY)
           setOfferShown(offerShownString === 'true')
+          
+          // Load last discount offer shown date
+          const lastDiscountDate = await AsyncStorage.getItem(DISCOUNT_OFFER_LAST_SHOWN_KEY)
+          setLastDiscountOfferDate(lastDiscountDate)
         }
       } catch (error) {
         console.error('Error loading user session:', error)
@@ -228,6 +236,48 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     return false
   }
 
+  // Function to check if discount offer should be shown today
+  const shouldShowDiscountOffer = async (): Promise<boolean> => {
+    if (!isGuest) return false
+    
+    try {
+      // Get the last shown date from storage
+      const lastShownDate = lastDiscountOfferDate || await AsyncStorage.getItem(DISCOUNT_OFFER_LAST_SHOWN_KEY)
+      
+      if (!lastShownDate) {
+        // If never shown before, show it
+        return true
+      }
+      
+      // Check if the last shown date is today
+      const today = new Date().toISOString().split('T')[0]
+      if (lastShownDate !== today) {
+        // If not shown today, show it
+        return true
+      }
+      
+      // Already shown today
+      return false
+      
+    } catch (error) {
+      console.error('Error checking if discount offer should be shown:', error)
+      return false
+    }
+  }
+  
+  // Function to mark that the discount offer has been shown today
+  const markDiscountOfferShown = async (): Promise<void> => {
+    if (!isGuest) return
+    
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      await AsyncStorage.setItem(DISCOUNT_OFFER_LAST_SHOWN_KEY, today)
+      setLastDiscountOfferDate(today)
+    } catch (error) {
+      console.error('Error marking discount offer as shown:', error)
+    }
+  }
+
   // Watch for conditions to show offer
   useEffect(() => {
     if (shouldShowSubscriptionOffer()) {
@@ -252,6 +302,8 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
         skipAuth,
         incrementGuestMessageCount,
         shouldShowSubscriptionOffer,
+        shouldShowDiscountOffer,
+        markDiscountOfferShown
       }}
     >
       {children}

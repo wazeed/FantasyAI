@@ -152,8 +152,10 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const renderSettingsCategory = (category, index) => (
-    <View key={index} style={[styles.settingsCategory, index !== 0 && { marginTop: 24 }]}>
-      <Text style={[styles.settingsCategoryTitle, { color: colors.text }]}>{category.title}</Text>
+    <View key={index} style={[styles.settingsCategoryContainer, index !== 0 && { marginTop: 24 }]}>
+      <View style={[styles.settingsCategoryHeader, { backgroundColor: colors.card }]}>
+        <Text style={[styles.settingsCategoryTitle, { color: colors.text }]}>{category.title}</Text>
+      </View>
       <View style={[styles.settingsList, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {category.items.map(item => renderSettingItem(item))}
       </View>
@@ -162,153 +164,95 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+      >
         {/* Profile Header */}
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity style={styles.profileImageContainer} onPress={handleEditProfile}>
-            <Image
-              source={require('../assets/profile-placeholder.png')}
+        <View style={[styles.profileHeader, { backgroundColor: colors.card }]}>
+          <View style={styles.profileImageContainer}>
+            <Image 
+              source={require('../assets/profile-placeholder.png')} 
               style={styles.profileImage}
             />
-            <View style={[styles.editImageButton, { backgroundColor: colors.primary }]}>
-              <Text style={styles.editImageText}>Edit</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.profileInfo}>
-            <Text style={[styles.displayName, { color: colors.text }]}>
-              {isGuest ? 'Guest User' : profileData.displayName}
-            </Text>
-            <Text style={[styles.username, { color: colors.subText }]}>
-              @{isGuest ? 'guest' : profileData.username}
-            </Text>
-            
-            <View style={styles.actionButtons}>
-              <TouchableOpacity 
-                style={[styles.primaryButton, { backgroundColor: colors.primary }]} 
-                onPress={handleEditProfile}
-              >
-                <Text style={styles.primaryButtonText}>Edit Profile</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Subscription Card - Prominent Placement */}
-        <View style={[styles.subscriptionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.subscriptionHeader}>
-            <Text style={[styles.subscriptionTitle, { color: colors.text }]}>
-              {isGuest ? 'Free Plan' : 'Premium Plan'}
-            </Text>
-            <View style={[
-              styles.subscriptionBadge, 
-              { backgroundColor: isGuest ? '#64748B' : '#10B981' }
-            ]}>
-              <Text style={styles.subscriptionBadgeText}>
-                {isGuest ? 'BASIC' : 'PREMIUM'}
-              </Text>
-            </View>
+            <TouchableOpacity style={styles.editImageButton}>
+              <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
           
-          <Text style={[styles.subscriptionDescription, { color: colors.subText }]}>
-            {isGuest 
-              ? 'Limited access with up to 10 messages per day.' 
-              : 'Full access to all features and unlimited conversations.'}
+          <Text style={[styles.displayName, { color: colors.text }]}>
+            {isGuest ? 'Guest User' : profileData.displayName}
+          </Text>
+          
+          <Text style={[styles.username, { color: colors.subText }]}>
+            @{isGuest ? 'guest' : profileData.username}
           </Text>
           
           {!isGuest && (
-            <Text style={[styles.subscriptionValidity, { color: colors.subText }]}>
-              Valid until: Dec 31, 2023
+            <Text style={[styles.bio, { color: colors.text }]}>
+              {profileData.bio}
             </Text>
           )}
           
-          <TouchableOpacity 
-            style={[
-              styles.subscriptionButton,
-              { backgroundColor: isGuest ? colors.accent : `${colors.accent}20` }
-            ]}
-            onPress={() => navigation.navigate('SubscriptionScreen')}
+          <TouchableOpacity
+            style={[styles.editProfileButton, { borderColor: colors.border }]}
+            onPress={handleEditProfile}
           >
-            <Text style={[
-              styles.subscriptionButtonText, 
-              { color: isGuest ? '#FFFFFF' : colors.accent }
-            ]}>
-              {isGuest ? 'Upgrade to Premium' : 'Manage Subscription'}
-            </Text>
+            <Ionicons name="create-outline" size={18} color={colors.text} style={styles.editButtonIcon} />
+            <Text style={[styles.editButtonText, { color: colors.text }]}>Edit Profile</Text>
           </TouchableOpacity>
-          
-          {isGuest && (
-            <View style={styles.benefitsContainer}>
-              <Text style={[styles.benefitsTitle, { color: colors.text }]}>
-                Why upgrade to Premium?
-              </Text>
-              
-              <View style={styles.benefitItem}>
-                <Ionicons name="infinite-outline" size={18} color={colors.accent} />
-                <Text style={[styles.benefitText, { color: colors.subText }]}>
-                  Unlimited conversations
-                </Text>
-              </View>
-              
-              <View style={styles.benefitItem}>
-                <Ionicons name="people-outline" size={18} color={colors.accent} />
-                <Text style={[styles.benefitText, { color: colors.subText }]}>
-                  Access to all AI characters
-                </Text>
-              </View>
-              
-              <View style={styles.benefitItem}>
-                <Ionicons name="remove-circle-outline" size={18} color={colors.accent} />
-                <Text style={[styles.benefitText, { color: colors.subText }]}>
-                  Ad-free experience
-                </Text>
-              </View>
-            </View>
-          )}
         </View>
         
-        {/* Profile Content - Only For Signed In Users */}
+        {/* Info Cards */}
         {!isGuest && (
           <>
-            <View style={[styles.section, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
-              <Text style={[styles.bioText, { color: colors.subText }]}>
-                {profileData.bio}
-              </Text>
-            </View>
-
-            <View style={[styles.section, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <View style={styles.infoHeader}>
+                <Ionicons name="location-outline" size={20} color={colors.text} />
+                <Text style={[styles.infoTitle, { color: colors.text }]}>Location</Text>
+              </View>
               <Text style={[styles.infoText, { color: colors.subText }]}>{profileData.location}</Text>
             </View>
-
-            <View style={[styles.section, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Interests</Text>
+            
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <View style={styles.infoHeader}>
+                <Ionicons name="heart-outline" size={20} color={colors.text} />
+                <Text style={[styles.infoTitle, { color: colors.text }]}>Interests</Text>
+              </View>
               <View style={styles.interestsContainer}>
-                {profileData.interests.map(renderInterestItem)}
+                {profileData.interests.map((interest, index) => renderInterestItem(interest, index))}
               </View>
             </View>
-
-            <View style={[styles.section, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Achievements</Text>
+            
+            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+              <View style={styles.infoHeader}>
+                <Ionicons name="trophy-outline" size={20} color={colors.text} />
+                <Text style={[styles.infoTitle, { color: colors.text }]}>Achievements</Text>
+              </View>
               <View style={styles.achievementsContainer}>
-                {profileData.achievements.map(renderAchievementItem)}
+                {profileData.achievements.map((achievement) => renderAchievementItem(achievement))}
               </View>
             </View>
           </>
         )}
-
-        {/* Organized Settings Categories */}
-        {SETTINGS_CATEGORIES.map(renderSettingsCategory)}
+        
+        {/* Settings */}
+        <View style={[styles.settingsContainer, { backgroundColor: colors.card }]}>
+          {SETTINGS_CATEGORIES.map((category, index) => renderSettingsCategory(category, index))}
+        </View>
         
         {/* Sign Out Button */}
-        <TouchableOpacity 
-          style={[styles.signOutButton, { backgroundColor: isDarkMode ? '#333333' : '#F0F0F0' }]} 
+        <TouchableOpacity
+          style={[styles.signOutButton, { backgroundColor: isDarkMode ? '#2A2A2A' : '#F5F5F5' }]}
           onPress={signOut}
         >
-          <Ionicons name="log-out-outline" size={20} color="#FF3B30" style={styles.signOutIcon} />
-          <Text style={[styles.signOutText, { color: '#FF3B30' }]}>Sign Out</Text>
+          <Ionicons name="log-out-outline" size={22} color={isDarkMode ? '#FF5252' : '#E53935'} style={styles.signOutIcon} />
+          <Text style={[styles.signOutText, { color: isDarkMode ? '#FF5252' : '#E53935' }]}>Sign Out</Text>
         </TouchableOpacity>
+        
+        <Text style={[styles.versionText, { color: colors.subText }]}>
+          Version 1.0.0
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -318,130 +262,136 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContainer: {
+  contentContainer: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 32,
   },
-  header: {
-    flexDirection: 'row',
-    marginBottom: 24,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
+  profileHeader: {
+    padding: 24,
+    borderRadius: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   profileImageContainer: {
     position: 'relative',
-    marginRight: 16,
+    marginBottom: 16,
   },
   profileImage: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#F0F0F0',
+    borderWidth: 4,
+    borderColor: '#4F46E5',
   },
   editImageButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  editImageText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  profileInfo: {
-    flex: 1,
+    backgroundColor: '#4F46E5',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   displayName: {
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
     marginBottom: 4,
   },
   username: {
     fontSize: 16,
     marginBottom: 12,
   },
-  actionButtons: {
-    flexDirection: 'row',
-  },
-  primaryButton: {
-    borderRadius: 8,
-    paddingVertical: 8,
+  bio: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
     paddingHorizontal: 16,
-    marginRight: 8,
   },
-  primaryButtonText: {
-    color: '#FFFFFF',
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  editButtonIcon: {
+    marginRight: 6,
+  },
+  editButtonText: {
+    fontSize: 15,
     fontWeight: '500',
-    fontSize: 14,
   },
-  section: {
-    marginBottom: 24,
-    borderBottomWidth: 1,
-    paddingBottom: 16,
+  infoCard: {
+    padding: 16,
+    borderRadius: 24,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionTitle: {
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
-  },
-  bioText: {
-    fontSize: 16,
-    lineHeight: 22,
+    marginLeft: 8,
   },
   infoText: {
-    fontSize: 16,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  contactLabel: {
-    fontSize: 16,
-    width: 60,
-  },
-  contactValue: {
-    fontSize: 16,
-    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
   },
   interestsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
   interestItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
     marginRight: 8,
     marginBottom: 8,
   },
   interestText: {
     fontSize: 14,
+    fontWeight: '500',
   },
   achievementsContainer: {
     marginTop: 8,
   },
   achievementItem: {
     flexDirection: 'row',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 12,
   },
   achievementIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFC107',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFD700',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   achievementIconText: {
-    fontSize: 20,
+    fontSize: 22,
   },
   achievementContent: {
     flex: 1,
@@ -453,19 +403,31 @@ const styles = StyleSheet.create({
   },
   achievementDescription: {
     fontSize: 14,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   achievementDate: {
     fontSize: 12,
   },
-  settingsCategory: {
+  settingsContainer: {
+    borderRadius: 24,
+    overflow: 'hidden',
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  settingsCategoryContainer: {
+    marginBottom: 8,
+  },
+  settingsCategoryHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   settingsCategoryTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 12,
-    paddingLeft: 4,
   },
   settingsList: {
     borderRadius: 12,
@@ -476,7 +438,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
@@ -488,84 +450,26 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   settingText: {
-    fontSize: 16,
-  },
-  subscriptionCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 24,
-  },
-  subscriptionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  subscriptionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  subscriptionBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  subscriptionBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  subscriptionDescription: {
-    fontSize: 14,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  subscriptionValidity: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  subscriptionButton: {
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  subscriptionButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  benefitsContainer: {
-    marginTop: 8,
-  },
-  benefitsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  benefitItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  benefitText: {
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: 15,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 24,
+    paddingVertical: 16,
+    borderRadius: 24,
+    marginTop: 8,
+    marginBottom: 16,
   },
   signOutIcon: {
     marginRight: 8,
   },
   signOutText: {
-    fontWeight: '500',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  versionText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 }); 

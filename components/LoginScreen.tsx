@@ -17,60 +17,19 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as Font from 'expo-font';
 
 const { width, height } = Dimensions.get('window');
-
-// Mock character images with local require
-const characters = [
-  require('../assets/char1.png'),
-  require('../assets/char2.png'),
-  require('../assets/char3.png'),
-];
 
 export default function LoginScreen({ navigation }) {
   const { signInWithApple, signInWithGoogle, skipAuth } = useAuth();
   const { isDarkMode } = useContext(ThemeContext);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fontsLoaded, setFontsLoaded] = useState(false);
   
-  // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(100)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
   
-  // Select a random character image
-  const randomCharacter = characters[Math.floor(Math.random() * characters.length)];
-
-  // Theme colors
-  const colors = {
-    background: isDarkMode ? '#121212' : '#FFFFFF',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    subText: isDarkMode ? '#AAAAAA' : '#666666',
-    buttonBg: isDarkMode ? '#222222' : '#F6F6F6',
-    buttonText: isDarkMode ? '#FFFFFF' : '#000000',
-    appleButtonBg: isDarkMode ? '#FFFFFF' : '#000000',
-    appleButtonText: isDarkMode ? '#000000' : '#FFFFFF',
-    border: isDarkMode ? '#333333' : '#EEEEEE',
-    accent: '#007AFF', // iOS blue
-    error: '#FF3B30', // iOS red
-  };
-
   useEffect(() => {
-    // Load custom fonts
-    async function loadFonts() {
-      try {
-        // Removed the problematic font loading
-        setFontsLoaded(true);
-      } catch (err) {
-        console.log('Font loading error:', err);
-        setFontsLoaded(true); // Continue even if fonts fail to load
-      }
-    }
-    
-    loadFonts();
-    
     // Run entrance animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -83,11 +42,6 @@ export default function LoginScreen({ navigation }) {
         duration: 800,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
     ]).start();
   }, []);
 
@@ -95,7 +49,6 @@ export default function LoginScreen({ navigation }) {
     try {
       setLoading('apple');
       setError(null);
-      
       await signInWithApple();
     } catch (err) {
       handleAuthError(err, 'Apple');
@@ -108,13 +61,16 @@ export default function LoginScreen({ navigation }) {
     try {
       setLoading('google');
       setError(null);
-      
       await signInWithGoogle();
     } catch (err) {
       handleAuthError(err, 'Google');
     } finally {
       setLoading(null);
     }
+  };
+
+  const handleEmailSignIn = () => {
+    navigation.navigate('EmailSignIn', { isSignUp: false });
   };
 
   const handleSkipAuth = () => {
@@ -140,118 +96,99 @@ export default function LoginScreen({ navigation }) {
     setTimeout(() => setError(null), 5000);
   };
 
-  const navigateToEmailSignIn = (isSignUp = false) => {
-    navigation.navigate('EmailSignIn', { isSignUp });
+  const navigateToSignUp = () => {
+    navigation.navigate('EmailSignIn', { isSignUp: true });
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea}>
-        <LinearGradient
-          colors={isDarkMode ? ['#121212', '#1A1A1A'] : ['#FFFFFF', '#F8F8F8']}
-          style={styles.gradientBackground}
-        >
+        <View style={styles.contentContainer}>
           <Animated.View 
             style={[
-              styles.contentContainer, 
+              styles.mainContent,
               { 
                 opacity: fadeAnim,
-                transform: [
-                  { translateY: slideAnim },
-                  { scale: scaleAnim }
-                ]
+                transform: [{ translateY: slideAnim }]
               }
             ]}
           >
-            <Animated.View style={styles.logoContainer}>
-              <Text style={[styles.appTitle, { color: colors.text }]}>Fantasy AI</Text>
-              <Text style={[styles.tagline, { color: colors.subText }]}>Elegant conversations, endless possibilities</Text>
-            </Animated.View>
-
-            <View style={[styles.characterImageContainer, { borderColor: colors.border }]}>
-              <LinearGradient
-                colors={isDarkMode ? ['#1E1E1E', '#252525'] : ['#F9F9F9', '#FFFFFF']}
-                style={styles.characterGradient}
-              >
-                <Image
-                  source={randomCharacter}
-                  style={styles.characterImage}
-                  resizeMode="contain"
-                />
-              </LinearGradient>
+            {/* Greeting */}
+            <Text style={styles.greeting}>Hi!</Text>
+            
+            {/* Social sign-in buttons */}
+            <TouchableOpacity 
+              style={styles.socialButton}
+              onPress={handleGoogleSignIn}
+              disabled={loading !== null}
+            >
+              {loading === 'google' ? (
+                <ActivityIndicator color="#121212" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={22} color="#DB4437" style={styles.socialIcon} />
+                  <Text style={styles.socialButtonText}>Continue with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.socialButton}
+              onPress={handleAppleSignIn}
+              disabled={loading !== null}
+            >
+              {loading === 'apple' ? (
+                <ActivityIndicator color="#121212" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="logo-apple" size={22} color="#000000" style={styles.socialIcon} />
+                  <Text style={styles.socialButtonText}>Continue with Apple</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.socialButton}
+              onPress={handleEmailSignIn}
+              disabled={loading !== null}
+            >
+              <Ionicons name="mail" size={22} color="#4285F4" style={styles.socialIcon} />
+              <Text style={styles.socialButtonText}>Continue with Email</Text>
+            </TouchableOpacity>
+            
+            {/* Sign up link */}
+            <View style={styles.signupContainer}>
+              <Text style={styles.signupText}>
+                Don't have an account? <Text style={styles.signupLink} onPress={navigateToSignUp}>Sign up</Text>
+              </Text>
             </View>
-
+            
+            {/* Forgot password link */}
+            <TouchableOpacity style={styles.forgotPasswordContainer}>
+              <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
+            </TouchableOpacity>
+            
+            {/* Guest mode button */}
+            <TouchableOpacity 
+              style={styles.guestButton}
+              onPress={handleSkipAuth}
+              disabled={loading !== null}
+            >
+              {loading === 'skip' ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.guestButtonText}>Enter as Guest</Text>
+              )}
+            </TouchableOpacity>
+            
             {error && (
-              <View style={[styles.errorContainer, { backgroundColor: isDarkMode ? 'rgba(255, 59, 48, 0.1)' : 'rgba(255, 59, 48, 0.05)' }]}>
-                <Ionicons name="alert-circle" size={20} color={colors.error} />
-                <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.socialButton, { backgroundColor: colors.appleButtonBg, borderColor: colors.border }]}
-                onPress={handleAppleSignIn}
-                disabled={loading !== null}
-              >
-                {loading === 'apple' ? (
-                  <ActivityIndicator color={colors.appleButtonText} size="small" />
-                ) : (
-                  <>
-                    <Ionicons name="logo-apple" size={22} color={colors.appleButtonText} style={styles.buttonIcon} />
-                    <Text style={[styles.socialButtonText, { color: colors.appleButtonText }]}>Sign in with Apple</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.socialButton, { backgroundColor: colors.buttonBg, borderColor: colors.border }]}
-                onPress={handleGoogleSignIn}
-                disabled={loading !== null}
-              >
-                {loading === 'google' ? (
-                  <ActivityIndicator color={colors.buttonText} size="small" />
-                ) : (
-                  <>
-                    <Ionicons name="logo-google" size={22} color="#DB4437" style={styles.buttonIcon} />
-                    <Text style={[styles.socialButtonText, { color: colors.buttonText }]}>
-                      Sign in with Google
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.socialButton, { backgroundColor: colors.buttonBg, borderColor: colors.border }]}
-                onPress={() => navigateToEmailSignIn(false)}
-                disabled={loading !== null}
-              >
-                <Ionicons name="mail" size={22} color={colors.accent} style={styles.buttonIcon} />
-                <Text style={[styles.socialButtonText, { color: colors.buttonText }]}>Sign in with Email</Text>
-              </TouchableOpacity>
-
-              <View style={styles.signupContainer}>
-                <Text style={[styles.accountText, { color: colors.subText }]}>Don't have an account?</Text>
-                <TouchableOpacity onPress={() => navigateToEmailSignIn(true)}>
-                  <Text style={[styles.signupText, { color: colors.accent }]}>Sign Up</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.skipButton, { borderColor: colors.border }]}
-                onPress={handleSkipAuth}
-                disabled={loading !== null}
-              >
-                {loading === 'skip' ? (
-                  <ActivityIndicator color={colors.subText} size="small" />
-                ) : (
-                  <Text style={[styles.skipButtonText, { color: colors.subText }]}>Enter as Guest</Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </Animated.View>
-        </LinearGradient>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -260,127 +197,84 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  gradientBackground: {
-    flex: 1,
-    width: '100%',
+    backgroundColor: '#121212',
   },
   safeArea: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   contentContainer: {
     flex: 1,
+    paddingHorizontal: 20,
+  },
+  mainContent: {
+    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 30,
-    width: '100%',
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  appTitle: {
-    fontSize: 42,
-    fontWeight: '700',
-    letterSpacing: -1,
-    marginBottom: 10,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-  },
-  tagline: {
-    fontSize: 17,
-    letterSpacing: -0.5,
-    fontWeight: '400',
-    marginBottom: 15,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-  },
-  characterImageContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    width: width * 0.8,
-    height: width * 0.7,
-  },
-  characterGradient: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  characterImage: {
-    width: '90%',
-    height: '90%',
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 20,
-    borderRadius: 12,
-    width: '100%',
-  },
-  errorText: {
-    fontSize: 14,
-    marginLeft: 8,
-    fontWeight: '500',
-  },
-  buttonContainer: {
-    width: '100%',
-    alignItems: 'center',
+  greeting: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 30,
   },
   socialButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
-    height: 54,
-    borderRadius: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    padding: 15,
+    marginBottom: 12,
   },
-  buttonIcon: {
-    marginRight: 12,
+  socialIcon: {
+    marginRight: 10,
   },
   socialButtonText: {
+    color: '#121212',
     fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: -0.5,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    fontWeight: '500',
+  },
+  guestButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  guestButtonText: {
+    color: '#4CAF50',
+    fontSize: 16,
+    fontWeight: '500',
   },
   signupContainer: {
-    flexDirection: 'row',
+    marginTop: 20,
     alignItems: 'center',
-    marginVertical: 20,
-  },
-  accountText: {
-    fontSize: 15,
-    marginRight: 5,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   signupText: {
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
-  },
-  skipButton: {
-    marginTop: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderRadius: 16,
-  },
-  skipButtonText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+  },
+  signupLink: {
+    color: '#4CAF50',
+    fontWeight: 'bold',
+  },
+  forgotPasswordContainer: {
+    marginTop: 15,
+    alignItems: 'center',
+  },
+  forgotPasswordText: {
+    color: '#4CAF50',
+    fontSize: 14,
+  },
+  errorContainer: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    borderRadius: 5,
+  },
+  errorText: {
+    color: '#FF3B30',
+    textAlign: 'center',
   },
 }); 

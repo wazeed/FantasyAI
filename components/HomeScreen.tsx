@@ -10,14 +10,19 @@ import {
   SafeAreaView,
   StatusBar,
   TextInput,
+  ScrollView,
+  Animated,
+  RefreshControl,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = width / 2 - 20;
+const COLUMN_WIDTH = width / 2 - 24;
 
 // Mock data for characters
 const CHARACTERS = [
@@ -456,12 +461,13 @@ const CATEGORIES = [
 ];
 
 export default function HomeScreen({ navigation }) {
-  const { signOut } = useAuth();
   const { isDarkMode } = useContext(ThemeContext);
+  const { isGuest, shouldShowDiscountOffer, markDiscountOfferShown, signOut } = useAuth();
   const [categories, setCategories] = useState(CATEGORIES);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const searchInputRef = useRef(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Dynamic colors based on theme
   const colors = {
@@ -470,13 +476,13 @@ export default function HomeScreen({ navigation }) {
     subText: isDarkMode ? '#AAAAAA' : '#666666',
     card: isDarkMode ? '#1E1E1E' : '#F5F5F5',
     cardBorder: isDarkMode ? '#333333' : '#E0E0E0',
-    accent: isDarkMode ? '#3D8CFF' : '#4F46E5',
+    accent: isDarkMode ? '#3D8CFF' : '#7E3AF2',
     categoryBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
-    categorySelected: isDarkMode ? '#3D8CFF' : '#4F46E5',
+    categorySelected: isDarkMode ? '#3D8CFF' : '#7E3AF2',
     categoryText: isDarkMode ? '#FFFFFF' : '#000000',
     searchBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
-    tagBg: isDarkMode ? 'rgba(79,70,229,0.15)' : 'rgba(79,70,229,0.1)',
-    tagText: isDarkMode ? '#3D8CFF' : '#4F46E5',
+    tagBg: isDarkMode ? 'rgba(79,70,229,0.15)' : 'rgba(126,58,242,0.1)',
+    tagText: isDarkMode ? '#3D8CFF' : '#7E3AF2',
     buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
   };
 
@@ -489,7 +495,26 @@ export default function HomeScreen({ navigation }) {
     setSelectedCategory(selectedId);
   };
 
-  const handleCharacterPress = (character) => {
+  const handleCharacterPress = async (character) => {
+    if (isGuest) {
+      // For guest users, check if we should show the discount offer
+      try {
+        const shouldShow = await shouldShowDiscountOffer();
+        
+        if (shouldShow) {
+          console.log('Showing discount offer screen');
+          // Mark that we've shown the offer today
+          await markDiscountOfferShown();
+          // Navigate to discount offer screen
+          navigation.navigate('DiscountOfferScreen', { fromCharacter: true, character });
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking discount offer status:', error);
+      }
+    }
+    
+    // Otherwise proceed to chat
     navigation.navigate('Chat', { character });
   };
 
@@ -535,38 +560,50 @@ export default function HomeScreen({ navigation }) {
   );
 
   const renderCharacterItem = ({ item }) => (
-    <TouchableOpacity 
-      style={[styles.characterItem, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} 
+    <TouchableOpacity
+      style={[
+        styles.characterCard,
+        { width: COLUMN_WIDTH },
+        isDarkMode ? styles.darkCard : styles.lightCard
+      ]}
       onPress={() => handleCharacterPress(item)}
+      activeOpacity={0.8}
     >
-      <View style={styles.characterImageWrapper}>
+      <View style={styles.characterImageContainer}>
         <Image source={item.image} style={styles.characterImage} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.imageGradient}
-        />
-        <View style={styles.followersContainer}>
-          <Text style={styles.followersEmoji}>💬</Text>
-          <Text style={styles.followersText}>{item.followers}</Text>
+        <View style={[styles.categoryTag, { backgroundColor: colors.accent }]}>
+          <Text style={[styles.categoryTagText, { color: '#FFFFFF' }]}>{item.category}</Text>
         </View>
       </View>
       
-      <View style={styles.characterContent}>
-        <View style={styles.nameRow}>
-          <Text style={[styles.characterName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-        </View>
+      <View style={styles.characterInfo}>
+        <Text style={[styles.characterName, { color: colors.text }]} numberOfLines={1}>
+          {item.name}
+        </Text>
         
-        <Text 
-          style={[styles.characterDescription, { color: colors.subText }]} 
-          numberOfLines={2}
-        >
+        <Text style={[styles.characterDescription, { color: colors.subText }]} numberOfLines={2}>
           {item.description}
         </Text>
         
-        <View style={styles.tagContainer}>
-          {item.tags.slice(0, 3).map(tag => renderTagItem(tag))}
+        <View style={styles.tagsContainer}>
+          {item.tags.slice(0, 3).map((tag) => renderTagItem(tag))}
+        </View>
+        
+        <View style={styles.characterMeta}>
+          <View style={styles.followerCount}>
+            <Ionicons name="people-outline" size={14} color={colors.subText} />
+            <Text style={[styles.followerText, { color: colors.subText }]}>
+              {item.followers}
+            </Text>
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.chatButton, { backgroundColor: colors.accent }]} 
+            onPress={() => handleCharacterPress(item)}
+          >
+            <Text style={styles.chatButtonText}>Chat</Text>
+            <Ionicons name="chatbubble-outline" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -587,28 +624,12 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       
-      <View style={[styles.header, { borderBottomColor: colors.cardBorder }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Fantasy AI</Text>
-        
-        <View style={styles.headerRight}>
-          <TouchableOpacity 
-            style={[styles.headerButton, { backgroundColor: colors.buttonBg }]}
-            onPress={navigateToHelpCenter}
-          >
-            <Ionicons name="help-circle-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.headerButton, { backgroundColor: colors.buttonBg }]}
-            onPress={focusSearchInput}
-          >
-            <Ionicons name="search-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.headerButton, { backgroundColor: colors.buttonBg }]} 
-            onPress={navigateToProfile}
-          >
-            <Ionicons name="person-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
+      <View style={[styles.header, isDarkMode ? styles.darkHeader : styles.lightHeader]}>
+        <View style={styles.headerLeft}>
+          <Image source={require('../assets/logo.png')} style={styles.logo} />
+          <Text style={[styles.appName, isDarkMode ? styles.darkAppName : styles.lightAppName]}>
+            Fantasy AI
+          </Text>
         </View>
       </View>
       
@@ -656,163 +677,281 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  darkContainer: {
+    backgroundColor: '#121212',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 15,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
+  darkHeader: {
+    borderBottomColor: '#2A2A2A',
+    backgroundColor: '#1A1A1A',
   },
-  headerRight: {
+  lightHeader: {
+    borderBottomColor: '#F0F0F0',
+    backgroundColor: '#FFFFFF',
+  },
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  headerButton: {
-    marginRight: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logo: {
+    width: 32,
+    height: 32,
+    marginRight: 8,
+  },
+  appName: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  darkAppName: {
+    color: '#FFFFFF',
+  },
+  lightAppName: {
+    color: '#000000',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginTop: 16,
-    marginBottom: 16,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  darkSearchContainer: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3A3A3A',
+  },
+  lightSearchContainer: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#EEEEEE',
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    paddingVertical: 2,
   },
-  categoriesContainer: {
-    paddingVertical: 8,
-    marginBottom: 8,
+  darkSearchInput: {
+    color: '#FFFFFF',
+  },
+  lightSearchInput: {
+    color: '#000000',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  darkSectionTitle: {
+    color: '#FFFFFF',
+  },
+  lightSectionTitle: {
+    color: '#000000',
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllText: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  darkViewAllText: {
+    color: '#0070F3',
+  },
+  lightViewAllText: {
+    color: '#0070F3',
   },
   categoriesList: {
+    paddingLeft: 20,
+    marginBottom: 16,
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 8,
   },
   categoryItem: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    marginRight: 10,
     borderRadius: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
+    marginRight: 12,
   },
   categoryItemSelected: {
-    borderWidth: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 12,
   },
   categoryText: {
+    fontSize: 14,
     fontWeight: '500',
   },
   categoryTextSelected: {
-    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  charactersList: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
   },
-  charactersList: {
-    paddingBottom: 20,
-  },
-  characterItem: {
-    width: COLUMN_WIDTH,
-    marginBottom: 16,
-    borderRadius: 16,
+  characterCard: {
+    marginBottom: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    borderWidth: 1,
-    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 4.65,
+    elevation: 6,
   },
-  characterImageWrapper: {
+  darkCard: {
+    backgroundColor: '#1E1E1E',
+  },
+  lightCard: {
+    backgroundColor: '#FFFFFF',
+  },
+  characterImageContainer: {
     position: 'relative',
-    width: '100%',
     height: 180,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
   },
   characterImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  imageGradient: {
+  categoryTag: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 60,
-  },
-  followersContainer: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    top: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
   },
-  followersEmoji: {
-    fontSize: 12,
-    marginRight: 4,
-    color: '#FFFFFF',
-  },
-  followersText: {
+  categoryTagText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
   },
-  characterContent: {
-    padding: 12,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+  characterInfo: {
+    padding: 14,
   },
   characterName: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   characterDescription: {
     fontSize: 13,
+    marginBottom: 10,
     lineHeight: 18,
-    marginBottom: 8,
   },
-  tagContainer: {
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 4,
+    marginBottom: 10,
   },
   tagItem: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     marginRight: 6,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   tagText: {
     fontSize: 11,
+    fontWeight: '600',
+  },
+  characterMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  followerCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  followerText: {
+    marginLeft: 5,
+    fontSize: 12,
     fontWeight: '500',
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  chatButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  emptyStateImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 20,
+    opacity: 0.7,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  emptyStateMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  actionButton: {
+    backgroundColor: '#0070F3',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

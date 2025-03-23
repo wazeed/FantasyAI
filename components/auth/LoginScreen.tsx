@@ -33,15 +33,15 @@ export default function LoginScreen() {
       {/* Floating Character Avatars */}
       <View style={styles.avatarContainer}>
         <Image 
-          source={require('../../assets/avatar1.png')} 
+          source={require('../../assets/char1.png')} 
           style={[styles.avatar, { top: '10%', left: '20%' }]} 
         />
         <Image 
-          source={require('../../assets/avatar2.png')} 
+          source={require('../../assets/char2.png')} 
           style={[styles.avatar, { top: '30%', right: '15%' }]} 
         />
         <Image 
-          source={require('../../assets/avatar3.png')} 
+          source={require('../../assets/char3.png')} 
           style={[styles.avatar, { bottom: '25%', left: '30%' }]} 
         />
       </View>
