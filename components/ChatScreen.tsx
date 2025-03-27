@@ -22,10 +22,10 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, ParamListBase } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { 
-  createConversation, 
-  getConversation, 
-  getConversationMessages, 
+import {
+  createConversation,
+  getConversation,
+  getConversationMessages,
   sendMessage as sendMessageToDb,
   Message as DbMessage
 } from '../services/conversationService';
@@ -33,11 +33,25 @@ import { recordCharacterInteraction } from '../services/characterService';
 import { v4 as uuidv4 } from 'uuid';
 
 // Define navigation types for this component
+// Match the RootStackParamList from App.tsx
 type RootStackParamList = {
-  Home: undefined;
-  Chat: { character: any, conversationId?: string };
+  Login: undefined;
+  EmailSignIn: { isSignUp?: boolean };
+  MainTabs: undefined;
+  Onboarding: undefined;
+  Chat: { character: any };
+  EditProfile: undefined;
+  Settings: undefined;
+  PrivacySettings: undefined;
+  NotificationSettings: undefined;
+  SecuritySettings: undefined;
+  FAQs: undefined;
+  ReportProblem: undefined;
+  HelpCenter: undefined;
+  ContactUs: undefined;
   SubscriptionScreen: { isSpecialOffer?: boolean };
   SubscriptionOfferScreen: undefined;
+  DiscountOfferScreen: { fromCharacter?: boolean };
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Chat'>;
@@ -66,11 +80,30 @@ const CHAT_THEMES = [
 
 const MESSAGE_ANIMATION_DURATION = 300;
 
-export default function ChatScreen({ route }) {
-  const { character, conversationId: existingConversationId } = route.params || { 
-    character: { name: 'AI Assistant', avatar: require('../assets/char1.png') } 
+interface Character {
+  id: string;
+  name: string;
+  description?: string;
+  avatar: any; // Changed from image to avatar
+  tags?: string[];
+  category?: string;
+}
+
+interface ChatScreenProps {
+  route: {
+    params: {
+      character: Character;
+      conversationId?: string;
+    };
   };
-  
+  navigation: NavigationProp;
+}
+
+export default function ChatScreen({ route, navigation }: ChatScreenProps) {
+  const { character, conversationId: existingConversationId } = route.params || {
+    character: { name: 'AI Assistant', avatar: require('../assets/char1.png') }
+  };
+
   const { user, isGuest, incrementGuestMessageCount, shouldShowSubscriptionOffer } = useAuth();
   const { isDarkMode } = useContext(ThemeContext);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -78,30 +111,33 @@ export default function ChatScreen({ route }) {
   const [loading, setLoading] = useState(false);
   const [typingIndicator, setTypingIndicator] = useState(0);
   const flatListRef = useRef<FlatList>(null);
-  const navigation = useNavigation<NavigationProp>();
   const [selectedTheme, setSelectedTheme] = useState(CHAT_THEMES[0]);
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(existingConversationId || null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [showCloseButton, setShowCloseButton] = useState(false);
 
   // Initialize animation values for messages
   const [messageAnimations, setMessageAnimations] = useState(new Map());
 
   // Dynamic colors based on theme
   const colors = {
-    background: isDarkMode ? '#121212' : '#F9FAFB',
-    inputBackground: isDarkMode ? '#374151' : '#F3F4F6',
-    text: isDarkMode ? '#FFFFFF' : '#1F2937',
-    subText: isDarkMode ? '#9CA3AF' : '#6B7280',
-    userBubble: isDarkMode ? '#3D8CFF' : '#DCF8C6',
-    aiBubble: isDarkMode ? '#2A2A2A' : '#FFFFFF',
-    aiText: isDarkMode ? '#FFFFFF' : '#000000',
-    border: isDarkMode ? '#374151' : '#E5E7EB',
-    sendButton: isDarkMode ? '#3D8CFF' : '#0070F3',
-    primary: '#4F46E5',
+    background: isDarkMode ? '#121212' : '#F8FAFC',
+    inputBackground: isDarkMode ? '#1E293B' : '#F1F5F9',
+    text: isDarkMode ? '#E5E7EB' : '#1E293B',
+    subText: isDarkMode ? '#94A3B8' : '#64748B',
+    userBubble: isDarkMode ? '#4F46E5' : '#38BDF8',
+    aiBubble: isDarkMode ? '#1E293B' : '#FFFFFF',
+    userText: '#FFFFFF', // User text always white
+    aiText: isDarkMode ? '#FFFFFF' : '#1E293B', // AI text white in dark mode
+    border: isDarkMode ? '#1E293B' : '#E2E8F0',
+    sendButton: isDarkMode ? '#4F46E5' : '#3B82F6',
+    primary: isDarkMode ? '#4F46E5' : '#3B82F6',
     secondary: '#8B5CF6',
-    card: isDarkMode ? '#1F2937' : '#FFFFFF',
-    accent: isDarkMode ? '#3D8CFF' : '#DCF8C6',
+    card: isDarkMode ? '#1E293B' : '#FFFFFF',
+    accent: isDarkMode ? '#818CF8' : '#93C5FD',
+    userIconColor: isDarkMode ? '#818CF8' : '#3B82F6',
+    avatarBorder: isDarkMode ? '#4F46E5' : '#FFFFFF', // Conditional border for avatar
   };
 
   // Load conversation and messages
@@ -109,17 +145,17 @@ export default function ChatScreen({ route }) {
     const loadConversation = async () => {
       try {
         if (!user && !isGuest) return;
-        
+
         setLoading(true);
-        
+
         if (existingConversationId) {
           // Load existing conversation
           const conversation = await getConversation(existingConversationId);
           if (!conversation) throw new Error('Conversation not found');
-          
+
           // Load messages
           const dbMessages = await getConversationMessages(existingConversationId);
-          
+
           // Convert DB messages to app format
           const formattedMessages = dbMessages.map(dbMsg => ({
             id: dbMsg.id,
@@ -127,7 +163,7 @@ export default function ChatScreen({ route }) {
             sender: dbMsg.sender_type === 'user' ? 'user' : 'ai' as 'user' | 'ai',
             timestamp: new Date(dbMsg.created_at).getTime(),
           }));
-          
+
           setMessages(formattedMessages);
           setConversationId(existingConversationId);
         } else {
@@ -139,15 +175,15 @@ export default function ChatScreen({ route }) {
               {
                 name: character.name,
                 description: character.description,
-                image: character.image,
+                image: character.avatar, // Use avatar
                 category: character.category,
                 tags: character.tags
               }
             );
-            
+
             if (newConversation) {
               setConversationId(newConversation.id);
-              
+
               // Add welcome message to database
               const welcomeMessage = generateWelcomeMessage(character);
               await sendMessageToDb(
@@ -156,10 +192,10 @@ export default function ChatScreen({ route }) {
                 welcomeMessage,
                 { characterId: character.id }
               );
-              
+
               // Record character interaction
               await recordCharacterInteraction(user.id, character.id);
-              
+
               // Set initial message in app state
               setMessages([{
                 id: uuidv4(),
@@ -186,20 +222,20 @@ export default function ChatScreen({ route }) {
         setInitialLoadComplete(true);
       }
     };
-    
+
     loadConversation();
   }, [user, isGuest, existingConversationId, character]);
 
   // Typing indicator animation
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-    
+
     if (loading) {
       intervalId = setInterval(() => {
         setTypingIndicator((prev) => (prev + 1) % TYPING_INDICATORS.length);
       }, 500);
     }
-    
+
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -209,16 +245,16 @@ export default function ChatScreen({ route }) {
     if (messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       const isUser = lastMessage.sender === 'user';
-      
+
       // Create new animated values for the last message
       const newFadeAnim = new Animated.Value(0);
       const newSlideAnim = new Animated.Value(isUser ? 50 : -50);
-      
+
       messageAnimations.set(lastMessage.id, {
         fadeAnim: newFadeAnim,
         slideAnim: newSlideAnim
       });
-      
+
       // Start animations
       Animated.parallel([
         Animated.timing(newFadeAnim, {
@@ -235,7 +271,7 @@ export default function ChatScreen({ route }) {
     }
   }, [messages]);
 
-  const generateWelcomeMessage = (character) => {
+  const generateWelcomeMessage = (character: Character) => {
     // Character-specific welcome messages with more personality and playfulness
     const characterMessages = {
       '1': [
@@ -297,20 +333,20 @@ export default function ChatScreen({ route }) {
       `*strikes a pose* Ta-da! I'm ${character.name}, and I've been waiting for someone like you to chat with! Let's make this fun! 🎭`,
       `*appears in a puff of glitter* Greetings! I'm ${character.name}, your new favorite conversation partner! Ready for an adventure? 🚀`
     ];
-    
+
     // Get character-specific messages or use defaults
-    const messages = characterMessages[character.id] || defaultMessages;
-    
+    const charMessages = characterMessages[character.id as keyof typeof characterMessages] || defaultMessages;
+
     // Return a random message from the available options
-    return messages[Math.floor(Math.random() * messages.length)];
+    return charMessages[Math.floor(Math.random() * charMessages.length)];
   };
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
-    
+
     const userMessage = inputText.trim();
     setInputText('');
-    
+
     // Create a user message object
     const newUserMessage: Message = {
       id: uuidv4(),
@@ -318,22 +354,27 @@ export default function ChatScreen({ route }) {
       sender: 'user',
       timestamp: Date.now(),
     };
-    
+
     // Add user message to UI
     setMessages(prev => [...prev, newUserMessage]);
-    
+
     // Increment guest message count if in guest mode
     if (isGuest) {
       await incrementGuestMessageCount();
-      
+
       // Check if we should show subscription offer
       const shouldShowOffer = await shouldShowSubscriptionOffer();
       if (shouldShowOffer) {
-        navigation.navigate('SubscriptionOfferScreen');
+        setShowCloseButton(false);
+        setTimeout(() => {
+          setShowCloseButton(true);
+        }, 15000); // Show close button after 15 seconds
+        // Navigate to DiscountOfferScreen instead, passing the state
+        navigation.navigate('DiscountOfferScreen', { fromCharacter: true });
         return;
       }
     }
-    
+
     // Save message to database if user is logged in
     if (user && !isGuest && conversationId) {
       try {
@@ -346,17 +387,17 @@ export default function ChatScreen({ route }) {
         console.error('Error saving user message:', error);
       }
     }
-    
+
     // Show typing indicator
     setLoading(true);
     const typingInterval = setInterval(() => {
       setTypingIndicator(prev => (prev + 1) % TYPING_INDICATORS.length);
     }, 500);
-    
+
     try {
       // Get AI response
       const aiResponse = await fetchAIResponse(userMessage, messages, character);
-      
+
       // Create an AI message object
       const newAIMessage: Message = {
         id: uuidv4(),
@@ -364,10 +405,10 @@ export default function ChatScreen({ route }) {
         sender: 'ai',
         timestamp: Date.now(),
       };
-      
+
       // Add AI message to UI
       setMessages(prev => [...prev, newAIMessage]);
-      
+
       // Save AI message to database if user is logged in
       if (user && !isGuest && conversationId) {
         try {
@@ -393,21 +434,21 @@ export default function ChatScreen({ route }) {
   const fetchAIResponse = async (
     userInput: string,
     chatHistory: Message[],
-    character: any
+    character: Character
   ): Promise<string> => {
     // Format character context based on the character
-    const characterContext = `You are ${character.name}. ${character.description}. You embody the following traits: ${character.tags.join(
+    const characterContext = `You are ${character.name}. ${character.description}. You embody the following traits: ${(character.tags || []).join( // Handle potentially undefined tags
       ', '
     )}. Respond in character to the user's messages. Keep your responses conversational, engaging, and consistent with your character.`;
-    
+
     // Format the conversation history for the API
     const conversationHistory = chatHistory.map((msg) => ({
       role: msg.sender === 'user' ? 'user' : 'assistant',
       content: msg.text,
     }));
-    
+
     // Add system message with character context
-    const messages = [
+    const apiMessages = [
       {
         role: 'system',
         content: characterContext,
@@ -415,7 +456,7 @@ export default function ChatScreen({ route }) {
       ...conversationHistory,
       { role: 'user', content: userInput },
     ];
-    
+
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -427,23 +468,23 @@ export default function ChatScreen({ route }) {
         },
         body: JSON.stringify({
           model: 'deepseek/deepseek-coder', // DeepSeek R1 model
-          messages: messages,
+          messages: apiMessages,
           temperature: 0.7,
           max_tokens: 1024,
         }),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         console.error('OpenRouter API error:', errorData);
         throw new Error(`API error: ${response.status}`);
       }
-      
+
       const data = await response.json();
       return data.choices[0].message.content.trim();
     } catch (error) {
       console.error('Error calling OpenRouter API:', error);
-      
+
       // Fallback to predefined responses if API call fails
       const defaultResponses = [
         "Hey there! What's up?",
@@ -453,32 +494,32 @@ export default function ChatScreen({ route }) {
         "Let me think about that for a moment...",
         "I appreciate you sharing that with me.",
       ];
-      
+
       // Return a fallback response
       return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
     }
   };
-  
+
   // Function to render a message with animation
-  const renderMessage = useCallback(({ item }) => {
+  const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isUser = item.sender === 'user';
-    
+
     // Initialize animation values if they don't exist for this message
     if (!messageAnimations.has(item.id)) {
       const fadeAnim = new Animated.Value(0);
-      const slideAnim = new Animated.Value(50);
+      const slideAnim = new Animated.Value(isUser ? 50 : -50); // Adjust initial slide based on sender
       messageAnimations.set(item.id, { fadeAnim, slideAnim });
-      
+
       // Start animation
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: MESSAGE_ANIMATION_DURATION,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 300,
+          duration: MESSAGE_ANIMATION_DURATION,
           useNativeDriver: true,
         }),
       ]).start();
@@ -486,20 +527,20 @@ export default function ChatScreen({ route }) {
 
     // Get animation values
     const messageAnimation = messageAnimations.get(item.id) || { fadeAnim: new Animated.Value(1), slideAnim: new Animated.Value(0) };
-    
+
     // Format timestamp for display
     const messageDate = new Date(item.timestamp);
-    const formattedTime = messageDate.toLocaleTimeString([], { 
-      hour: '2-digit', 
+    const formattedTime = messageDate.toLocaleTimeString([], {
+      hour: '2-digit',
       minute: '2-digit'
     });
-    
+
     return (
       <Animated.View
         key={item.id}
         style={[
-          styles.messageBubbleContainer,
-          isUser ? styles.userMessageContainer : styles.aiMessageContainer,
+          styles.messageRow, // Use messageRow for overall layout
+          isUser ? styles.userMessageRow : styles.aiMessageRow,
           {
             opacity: messageAnimation.fadeAnim,
             transform: [{ translateY: messageAnimation.slideAnim }],
@@ -508,23 +549,22 @@ export default function ChatScreen({ route }) {
       >
         {!isUser && (
           <Image
-            source={typeof character.image === 'number' ? character.image : { uri: character.image }}
-            style={styles.messageBubbleAvatar}
+            source={typeof character.avatar === 'number' ? character.avatar : { uri: character.avatar }}
+            style={[styles.messageAvatar, { borderColor: colors.avatarBorder }]} // Apply conditional border here
           />
         )}
-        
+
         <View
           style={[
             styles.messageBubble,
-            isUser ? styles.userMessageBubbleContainer : styles.aiMessageBubbleContainer,
+            isUser ? styles.userMessageBubble : styles.aiMessageBubble,
+            isUser ? { backgroundColor: colors.userBubble } : { backgroundColor: colors.aiBubble, borderColor: colors.border, borderWidth: isDarkMode ? 0 : 1 },
           ]}
         >
           <Text
             style={[
-              styles.messageBubbleText,
-              isUser
-                ? (isDarkMode ? styles.darkUserMessageText : styles.lightUserMessageText)
-                : (isDarkMode ? styles.darkAiMessageText : styles.lightAiMessageText)
+              styles.messageText,
+              { color: isUser ? colors.userText : colors.aiText }
             ]}
           >
             {item.text}
@@ -532,10 +572,8 @@ export default function ChatScreen({ route }) {
 
           <Text
             style={[
-              styles.messageBubbleTime,
-              isUser
-                ? (isDarkMode ? styles.darkUserTimeText : styles.lightUserTimeText)
-                : (isDarkMode ? styles.darkAiTimeText : styles.lightAiTimeText)
+              styles.messageTime,
+              { color: isUser ? 'rgba(255, 255, 255, 0.7)' : colors.subText }
             ]}
           >
             {formattedTime}
@@ -543,19 +581,15 @@ export default function ChatScreen({ route }) {
         </View>
 
         {isUser && (
-          <Ionicons
-            name="person-circle"
-            size={30}
-            color={colors.userIconColor}
-            style={styles.messageBubbleAvatar}
-          />
+          <View style={styles.userAvatarPlaceholder} /> // Keep placeholder for alignment
         )}
       </Animated.View>
     );
-  }, [isDarkMode, character, messageAnimations, colors]);
+  }, [isDarkMode, character, messageAnimations, colors]); // Include colors in dependency array
 
   const handleBack = () => {
-    navigation.goBack();
+    // Navigate back to the main tabs screen which contains the home tab
+    navigation.navigate('MainTabs');
   };
 
   const renderThemeSelector = () => (
@@ -565,9 +599,9 @@ export default function ChatScreen({ route }) {
       animationType="slide"
       onRequestClose={() => setShowThemeSelector(false)}
     >
-      <View style={[styles.themeModal, { backgroundColor: colors.card }]}>
-        <View style={styles.themeHeader}>
-          <Text style={[styles.themeTitle, { color: colors.text }]}>Chat Background</Text>
+      <View style={[styles.themeModalContainer, { backgroundColor: colors.card }]}>
+        <View style={styles.themeModalHeader}>
+          <Text style={[styles.themeModalTitle, { color: colors.text }]}>Chat Background</Text>
           <TouchableOpacity onPress={() => setShowThemeSelector(false)}>
             <Ionicons name="close" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -579,9 +613,9 @@ export default function ChatScreen({ route }) {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
-                styles.themeItem,
+                styles.themeItemContainer,
                 selectedTheme.id === item.id && styles.themeItemSelected,
-                { borderColor: colors.border }
+                { borderColor: selectedTheme.id === item.id ? colors.primary : colors.border } // Highlight selected
               ]}
               onPress={() => {
                 setSelectedTheme(item);
@@ -589,15 +623,15 @@ export default function ChatScreen({ route }) {
               }}
             >
               {item.background ? (
-                <Image source={item.background} style={styles.themePreview} />
+                <Image source={item.background} style={styles.themePreviewImage} />
               ) : (
-                <View style={[styles.themePreview, { backgroundColor: colors.background }]} />
+                <View style={[styles.themePreviewImage, { backgroundColor: colors.background }]} />
               )}
-              <Text style={[styles.themeName, { color: colors.text }]}>{item.name}</Text>
+              <Text style={[styles.themeNameText, { color: colors.text }]}>{item.name}</Text>
             </TouchableOpacity>
           )}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.themeList}
+          contentContainerStyle={styles.themeListContainer}
         />
       </View>
     </Modal>
@@ -610,60 +644,75 @@ export default function ChatScreen({ route }) {
         style={styles.container}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
+        <View style={[styles.headerContainer, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
+            <Ionicons name="chevron-back" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenterContent}>
+            <Image
+              source={typeof character.avatar === 'number' ? character.avatar : { uri: character.avatar }}
+              style={[styles.headerAvatar, { borderColor: colors.avatarBorder }]} // Use conditional border
+            />
+            <Text style={[styles.headerTitle, { color: colors.text }]}>{character.name}</Text>
+          </View>
+          <TouchableOpacity style={styles.headerButton} onPress={() => setShowThemeSelector(true)}>
+            <Ionicons name="color-palette-outline" size={26} color={colors.text} />
+          </TouchableOpacity>
+        </View>
         <ImageBackground
           source={selectedTheme.background}
-          style={styles.chatContainer}
-          imageStyle={styles.backgroundImage}
+          style={styles.chatAreaContainer}
+          imageStyle={styles.chatBackgroundImage}
         >
           <FlatList
             ref={flatListRef}
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.messagesList}
+            contentContainerStyle={styles.messageListContent}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             showsVerticalScrollIndicator={false}
           />
         </ImageBackground>
 
         {loading && (
-          <View style={[styles.typingContainer, { backgroundColor: colors.background }]}>
-            <Image source={character.avatar} style={styles.typingAvatar} />
-            <Text style={[styles.typingText, { color: colors.subText }]}>
+          <View style={[styles.typingIndicatorContainer, { backgroundColor: colors.background }]}>
+            <Image source={character.avatar} style={[styles.typingIndicatorAvatar, { borderColor: colors.avatarBorder }]} />
+            <Text style={[styles.typingIndicatorText, { color: colors.subText }]}>
               {character.name} {TYPING_INDICATORS[typingIndicator]}
             </Text>
           </View>
         )}
-        
-        <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
+
+        <View style={[styles.inputAreaContainer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
+            style={[styles.textInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
             placeholder="Type a message..."
             placeholderTextColor={colors.subText}
             value={inputText}
             onChangeText={setInputText}
             multiline
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.sendButton,
+              styles.sendButtonContainer,
               { backgroundColor: colors.sendButton },
-              !inputText.trim() && styles.sendButtonDisabled
-            ]} 
+              !inputText.trim() && styles.sendButtonDisabled,
+            ]}
             onPress={handleSend}
             disabled={!inputText.trim()}
           >
             <Ionicons name="send" size={24} color={inputText.trim() ? '#FFFFFF' : colors.subText} />
           </TouchableOpacity>
         </View>
-        
+
         {isGuest && (
-          <View style={[styles.guestBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.guestBannerText, { color: colors.text }]}>
+          <View style={[styles.guestModeBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.guestModeText, { color: colors.text }]}>
               You're using a guest account with limited messages.{' '}
-              <Text 
-                style={[styles.upgradeLink, { color: colors.primary }]}
-                onPress={() => navigation.navigate('SubscriptionScreen')}
+              <Text
+                style={[styles.guestModeUpgradeLink, { color: colors.primary }]}
+                onPress={() => navigation.navigate('SubscriptionScreen', { isSpecialOffer: false })}
               >
                 Upgrade now
               </Text>
@@ -676,166 +725,168 @@ export default function ChatScreen({ route }) {
   );
 }
 
+// --- Styles ---
 const styles = StyleSheet.create({
+  // --- Layout ---
   container: {
     flex: 1,
   },
-  header: {
+  headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    justifyContent: 'space-between', // Distribute space
+    paddingHorizontal: 10, // Reduced horizontal padding
+    paddingVertical: 10, // Reduced vertical padding
     borderBottomWidth: 1,
+    height: 60, // Fixed height for consistency
   },
-  backButton: {
-    padding: 8,
-    borderRadius: 20,
-    marginRight: 5,
+  headerButton: {
+    padding: 8, // Consistent padding for buttons
+    minWidth: 40, // Ensure buttons have minimum tap area
+    alignItems: 'center', // Center icon
   },
-  headerInfo: {
+  headerCenterContent: {
+    flex: 1, // Allow center content to take available space
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'center', // Center items horizontally
+    marginHorizontal: 5, // Add some margin around center content
   },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    marginRight: 12,
+  headerAvatar: {
+    width: 36, // Slightly smaller avatar
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10, // Adjusted margin
+    borderWidth: 1, // Keep border thin
   },
-  characterName: {
+  headerTitle: {
     fontSize: 18,
     fontWeight: '600',
   },
-  menuButton: {
-    padding: 8,
-    borderRadius: 20,
-    marginLeft: 5,
+  chatAreaContainer: {
+    flex: 1,
   },
-  placeholder: {
-    width: 40,
+  chatBackgroundImage: {
+    // Styles for the background image itself if needed (e.g., resizeMode)
   },
-  messagesList: {
+  messageListContent: {
     paddingHorizontal: 16,
     paddingVertical: 20,
+    flexGrow: 1, // Ensure it grows to fill space
   },
-  messageContainer: {
+
+  // --- Messages ---
+  messageRow: {
     flexDirection: 'row',
-    marginVertical: 4,
-    paddingHorizontal: 16,
+    marginBottom: 16, // Increased spacing between messages
     alignItems: 'flex-end',
   },
-  userMessageContainer: {
+  userMessageRow: {
     justifyContent: 'flex-end',
   },
-  aiMessageContainer: {
+  aiMessageRow: {
     justifyContent: 'flex-start',
   },
-  avatarImage: {
+  messageAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    borderWidth: 1, // Thin border
+  },
+  userAvatarPlaceholder: { // Used for alignment on user side
+    width: 36,
+    marginRight: 8, // Match avatar margin
   },
   messageBubble: {
-    maxWidth: '75%',
-    padding: 12,
-    borderRadius: 20,
+    maxWidth: '75%', // Max width for bubble
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18, // Rounded corners
     marginHorizontal: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   userMessageBubble: {
-    borderTopRightRadius: 4,
+    borderTopRightRadius: 4, // Characteristic shape
   },
   aiMessageBubble: {
-    borderTopLeftRadius: 4,
+    borderTopLeftRadius: 4, // Characteristic shape
   },
   messageText: {
     fontSize: 16,
     lineHeight: 22,
   },
-  timestampText: {
-    fontSize: 12,
+  messageTime: {
+    fontSize: 11,
     marginTop: 4,
     alignSelf: 'flex-end',
+    opacity: 0.7, // Make time less prominent
   },
-  userAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  typingContainer: {
+
+  // --- Typing Indicator ---
+  typingIndicatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  typingAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  typingIndicatorAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     marginRight: 8,
+    borderWidth: 1,
   },
-  typingText: {
+  typingIndicatorText: {
     fontSize: 14,
+    fontStyle: 'italic',
   },
-  inputContainer: {
+
+  // --- Input Area ---
+  inputAreaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    padding: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
   },
-  input: {
+  textInput: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 24, // Fully rounded input
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8, // Adjust padding per platform
     marginRight: 8,
     fontSize: 16,
-    maxHeight: 100,
+    maxHeight: 120, // Limit height for multiline
   },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
+  sendButtonContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24, // Circular button
     alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButtonDisabled: {
     opacity: 0.5,
   },
-  guestBanner: {
+
+  // --- Guest Banner ---
+  guestModeBanner: {
     padding: 12,
     borderTopWidth: 1,
   },
-  guestBannerText: {
+  guestModeText: {
     fontSize: 14,
     textAlign: 'center',
   },
-  upgradeLink: {
-    color: '#4F46E5',
+  guestModeUpgradeLink: {
     fontWeight: 'bold',
   },
-  chatContainer: {
-    flex: 1,
-  },
-  backgroundImage: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-  },
-  themeModal: {
+
+  // --- Theme Selector Modal ---
+  themeModalContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -849,20 +900,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  themeHeader: {
+  themeModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  themeTitle: {
+  themeModalTitle: {
     fontSize: 18,
     fontWeight: '600',
   },
-  themeList: {
+  themeListContainer: {
     paddingVertical: 8,
   },
-  themeItem: {
+  themeItemContainer: {
     marginRight: 16,
     alignItems: 'center',
     borderWidth: 2,
@@ -871,514 +922,18 @@ const styles = StyleSheet.create({
     width: 100,
   },
   themeItemSelected: {
-    borderColor: '#4F46E5',
+    // Border color is applied dynamically based on selection
   },
-  themePreview: {
+  themePreviewImage: {
     width: 80,
     height: 80,
     borderRadius: 8,
     marginBottom: 8,
+    borderWidth: 1, // Add border to previews
+    borderColor: 'rgba(0,0,0,0.1)', // Light border for previews
   },
-  themeName: {
+  themeNameText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  messageRow: {
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    maxWidth: '90%',
-  },
-  userMessageRow: {
-    alignSelf: 'flex-end',
-    marginLeft: 'auto',
-  },
-  aiMessageRow: {
-    alignSelf: 'flex-start',
-    marginRight: 'auto',
-  },
-  messageBubbleAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 8,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  userAvatarPlaceholder: {
-    width: 36,
-    marginLeft: 8,
-  },
-  messageBubble: {
-    padding: 12,
-    borderRadius: 20,
-    maxWidth: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  userMessageBubble: {
-    borderTopRightRadius: 4,
-    marginLeft: 'auto',
-  },
-  aiMessageBubble: {
-    borderTopLeftRadius: 4,
-    marginRight: 'auto',
-  },
-  darkUserBubble: {
-    backgroundColor: '#3B82F6',
-  },
-  lightUserBubble: {
-    backgroundColor: '#3B82F6',
-  },
-  darkAiBubble: {
-    backgroundColor: '#2A2A2A',
-  },
-  lightAiBubble: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  darkUserBubbleText: {
-    color: '#FFFFFF',
-  },
-  lightUserBubbleText: {
-    color: '#FFFFFF',
-  },
-  darkAiBubbleText: {
-    color: '#FFFFFF',
-  },
-  lightAiBubbleText: {
-    color: '#1F2937',
-  },
-  messageTime: {
-    fontSize: 11,
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  darkUserTimeText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  lightUserTimeText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  darkAiTimeText: {
-    color: '#9CA3AF',
-  },
-  lightAiTimeText: {
-    color: '#6B7280',
-  },
-  typingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    marginLeft: 46,
-  },
-  typingText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderTopWidth: 1,
-  },
-  darkInputContainer: {
-    backgroundColor: '#1F1F1F',
-    borderTopColor: '#333',
-  },
-  lightInputContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopColor: '#E5E7EB',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#374151',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 8,
-    fontSize: 16,
-    maxHeight: 120,
-  },
-  darkInput: {
-    backgroundColor: '#2A2A2A',
-    color: '#FFFFFF',
-  },
-  lightInput: {
-    backgroundColor: '#F3F4F6',
-    color: '#1F2937',
-  },
-  sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3D8CFF',
-  },
-  disabledSendButton: {
-    opacity: 0.5,
-  },
-  inputActions: {
-    flexDirection: 'row',
-    padding: 8,
-  },
-  inputActionButton: {
-    padding: 8,
-    marginHorizontal: 4,
-  },
-  subscriptionPromptContainer: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  darkSubscriptionPrompt: {
-    backgroundColor: '#2A2A2A',
-  },
-  lightSubscriptionPrompt: {
-    backgroundColor: '#F3F4F6',
-  },
-  subscriptionPromptTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subscriptionPromptText: {
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  subscribeButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    backgroundColor: '#3D8CFF',
-  },
-  subscribeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  themeSelectorContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: isDarkMode => isDarkMode ? '#1F1F1F' : '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: isDarkMode => isDarkMode ? '#333' : '#E5E7EB',
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  themeSelectorTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  themesList: {
-    marginBottom: 16,
-  },
-  themeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  darkThemeItem: {
-    backgroundColor: '#2A2A2A',
-    borderColor: '#3A3A3A',
-  },
-  lightThemeItem: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
-  },
-  selectedThemeItem: {
-    borderColor: '#3D8CFF',
-    borderWidth: 2,
-  },
-  themePreview: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: isDarkMode => isDarkMode ? '#3A3A3A' : '#E5E7EB',
-    overflow: 'hidden',
-  },
-  defaultThemePreview: {
-    backgroundColor: isDarkMode => isDarkMode ? '#121212' : '#F9FAFB',
-  },
-  themeItemInfo: {
-    flex: 1,
-  },
-  themeItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  closeButton: {
-    alignSelf: 'center',
-    marginTop: 8,
-    padding: 12,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3D8CFF',
-  },
-  avatarContainer: {
-    width: 40,
-    height: 40,
-    marginHorizontal: 8,
-    justifyContent: 'flex-end',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  messageBubble: {
-    maxWidth: '70%',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  userMessageBubble: {
-    borderTopRightRadius: 4,
-    marginLeft: 40,
-  },
-  aiMessageBubble: {
-    borderTopLeftRadius: 4,
-    marginRight: 40,
-  },
-  darkUserBubble: {
-    backgroundColor: '#3D8CFF',
-  },
-  darkAiBubble: {
-    backgroundColor: '#2A2A2A',
-  },
-  lightUserBubble: {
-    backgroundColor: '#7E3AF2',
-  },
-  lightAiBubble: {
-    backgroundColor: '#F0F0F0',
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-    marginBottom: 4,
-  },
-  darkMessageText: {
-    color: '#FFFFFF',
-  },
-  lightMessageText: {
-    color: '#000000',
-  },
-  messageTime: {
-    fontSize: 11,
-    alignSelf: 'flex-end',
-    marginTop: 2,
-    opacity: 0.7,
-  },
-  darkUserTimeText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  lightUserTimeText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  darkAiTimeText: {
-    color: '#9CA3AF',
-  },
-  lightAiTimeText: {
-    color: '#6B7280',
-  },
-  typingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    marginLeft: 46,
-  },
-  typingText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderTopWidth: 1,
-  },
-  darkInputContainer: {
-    backgroundColor: '#1F1F1F',
-    borderTopColor: '#333',
-  },
-  lightInputContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopColor: '#E5E7EB',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#374151',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 8,
-    fontSize: 16,
-    maxHeight: 120,
-  },
-  darkInput: {
-    backgroundColor: '#2A2A2A',
-    color: '#FFFFFF',
-  },
-  lightInput: {
-    backgroundColor: '#F3F4F6',
-    color: '#1F2937',
-  },
-  sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3D8CFF',
-  },
-  disabledSendButton: {
-    opacity: 0.5,
-  },
-  inputActions: {
-    flexDirection: 'row',
-    padding: 8,
-  },
-  inputActionButton: {
-    padding: 8,
-    marginHorizontal: 4,
-  },
-  subscriptionPromptContainer: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  darkSubscriptionPrompt: {
-    backgroundColor: '#2A2A2A',
-  },
-  lightSubscriptionPrompt: {
-    backgroundColor: '#F3F4F6',
-  },
-  subscriptionPromptTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subscriptionPromptText: {
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  subscribeButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    backgroundColor: '#3D8CFF',
-  },
-  subscribeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  themeSelectorContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: isDarkMode => isDarkMode ? '#1F1F1F' : '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: isDarkMode => isDarkMode ? '#333' : '#E5E7EB',
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  themeSelectorTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  themesList: {
-    marginBottom: 16,
-  },
-  themeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  darkThemeItem: {
-    backgroundColor: '#2A2A2A',
-    borderColor: '#3A3A3A',
-  },
-  lightThemeItem: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
-  },
-  selectedThemeItem: {
-    borderColor: '#3D8CFF',
-    borderWidth: 2,
-  },
-  themePreview: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: isDarkMode => isDarkMode ? '#3A3A3A' : '#E5E7EB',
-    overflow: 'hidden',
-  },
-  defaultThemePreview: {
-    backgroundColor: isDarkMode => isDarkMode ? '#121212' : '#F9FAFB',
-  },
-  themeItemInfo: {
-    flex: 1,
-  },
-  themeItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  closeButton: {
-    alignSelf: 'center',
-    marginTop: 8,
-    padding: 12,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3D8CFF',
-  },
-}); 
+});

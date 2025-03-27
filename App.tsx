@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack'; // Added NativeStackNavigationProp
+import { createBottomTabNavigator, BottomTabNavigationProp } from '@react-navigation/bottom-tabs'; // Added BottomTabNavigationProp
 import { StatusBar } from 'expo-status-bar';
-import { 
+import {
   ActivityIndicator, 
   View, 
   StyleSheet, 
@@ -102,8 +102,11 @@ const DarkTheme = {
   },
 };
 
+// Define navigation prop type for ChatListScreen
+type ChatListScreenNavigationProp = BottomTabNavigationProp<MainTabsParamList, 'ChatTab'>;
+
 // Create a responsive ChatListScreen to list available characters
-function ChatListScreen({ navigation }) {
+function ChatListScreen({ navigation }: { navigation: ChatListScreenNavigationProp }) {
   const { isDarkMode } = React.useContext(ThemeContext);
   const theme = isDarkMode ? DarkTheme : LightTheme;
   const { width } = useWindowDimensions();
@@ -159,9 +162,10 @@ function ChatListScreen({ navigation }) {
                     marginRight: width * 0.04
                   }
                 ]}
-                onPress={() => navigation.navigate('Chat', { character })}
+                // Use getParent() to access the Stack navigator and navigate to Chat
+                onPress={() => navigation.getParent()?.navigate('Chat', { character })}
               >
-                <Image 
+                <Image
                   source={character.avatar} 
                   style={[
                     styles.trendingAvatar, 
@@ -202,7 +206,8 @@ function ChatListScreen({ navigation }) {
                   marginBottom: width * 0.03
                 }
               ]}
-              onPress={() => navigation.navigate('Chat', { character: chat })}
+              // Use getParent() to access the Stack navigator and navigate to Chat
+              onPress={() => navigation.getParent()?.navigate('Chat', { character: chat })}
             >
               <Image source={chat.avatar} style={styles.avatar} />
               <View style={styles.chatInfo}>
@@ -243,7 +248,8 @@ function MainTabNavigator() {
             iconName = focused ? 'person' : 'person-outline';
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
+          // Cast iconName to any to satisfy Ionicons type temporarily
+          return <Ionicons name={iconName as any} size={size} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: 'gray',
@@ -280,8 +286,11 @@ function MainTabNavigator() {
   );
 }
 
+// Define navigation prop type for ProfileTabWithReset
+type ProfileTabNavigationProp = BottomTabNavigationProp<MainTabsParamList, 'ProfileTab'>;
+
 // Wrapper for ProfileScreen that includes reset onboarding button
-function ProfileTabWithReset({ navigation }) {
+function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationProp }) {
   const { resetOnboarding } = useOnboarding();
   const { isDarkMode } = React.useContext(ThemeContext);
   
@@ -400,12 +409,12 @@ const Navigation = () => {
           />
           <Stack.Screen 
             name="Chat" 
-            component={ChatScreen} 
-            options={({ route }) => ({
-              // Only show header for chat screen with character name
-              headerShown: true,
+            component={ChatScreen}
+            options={({ route }) => ({ // Restore function structure
+              // Use the header defined within ChatScreen.tsx itself
+              headerShown: false,
+              // Keep title logic in case needed elsewhere, though header is hidden
               title: route.params?.character?.name || 'Chat',
-              ...commonHeaderStyle,
             })}
           />
           <Stack.Screen 

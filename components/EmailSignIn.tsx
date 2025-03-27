@@ -21,9 +21,22 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+// Define types for navigation and route props
+type EmailSignInProps = {
+  navigation: {
+    goBack: () => void;
+    navigate: (screen: string, params?: any) => void;
+  };
+  route?: {
+    params?: {
+      isSignUp?: boolean;
+    };
+  };
+};
+
 const { width } = Dimensions.get('window');
 
-export default function EmailSignIn({ navigation, route }) {
+export default function EmailSignIn({ navigation, route }: EmailSignInProps) {
   // Get initial mode from route params or default to signin
   const initialMode = route?.params?.isSignUp ? 'signup' : 'signin';
   const { signIn, signUp } = useAuth();

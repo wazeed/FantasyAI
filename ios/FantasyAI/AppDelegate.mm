@@ -18,7 +18,7 @@
   
   // Fix splash screen flash
   // Load storyboard for splash screen
-  UIStoryboard *sb = [UIStoryboard storyboardWithName:@"LaunchScreen" bundle:nil];
+  UIStoryboard *sb = [UIStoryboard storyboardWithName:@"SplashScreen" bundle:nil];
   UIViewController *vc = [sb instantiateInitialViewController];
   
   // Apply the storyboard to the rootView's loadingView

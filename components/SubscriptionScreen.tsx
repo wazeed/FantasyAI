@@ -31,7 +31,7 @@ const SubscriptionScreen = ({ route }: SubscriptionScreenProps) => {
   
   // State
   const [isFreeTrial, setIsFreeTrial] = useState(true);
-  const [selectedPlan, setSelectedPlan] = useState('yearly');
+  const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'weekly'>('yearly'); // Explicitly type state
   
   // Dynamic colors based on theme
   const colors = {
@@ -59,7 +59,7 @@ const SubscriptionScreen = ({ route }: SubscriptionScreenProps) => {
     // Implement actual restore logic here
   };
 
-  const handleSubscribe = (planId) => {
+  const handleSubscribe = (planId: 'yearly' | 'weekly') => {
     // Here would be code to handle subscription logic
     Alert.alert(
       "Subscription Success",
@@ -84,7 +84,7 @@ const SubscriptionScreen = ({ route }: SubscriptionScreenProps) => {
     setIsFreeTrial(!isFreeTrial);
   };
 
-  const selectPlan = (plan) => {
+  const selectPlan = (plan: 'yearly' | 'weekly') => {
     setSelectedPlan(plan);
   };
 
@@ -101,10 +101,9 @@ const SubscriptionScreen = ({ route }: SubscriptionScreenProps) => {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Removed the header View containing the close button */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <Ionicons name="close" size={28} color={colors.text} />
-          </TouchableOpacity>
+          {/* Removed Close Button */}
           <View style={{ flex: 1 }} />
           <TouchableOpacity onPress={handleRestorePurchase} style={styles.restoreButton}>
             <Text style={[styles.restoreText, { color: colors.subText }]}>Restore Purchase</Text>

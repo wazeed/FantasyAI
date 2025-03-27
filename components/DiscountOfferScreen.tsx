@@ -61,9 +61,11 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
       }).start();
     }, 15000);
 
-    // For testing - show close button immediately in development
+    // For testing - show close button after 5 seconds in development
     if (__DEV__) {
       console.log('Development mode: Close button will appear in 5 seconds');
+      // Clear the 15s timer if the 5s one is active
+      clearTimeout(closeButtonTimer);
       setTimeout(() => {
         console.log('DEV: Showing close button');
         setShowCloseButton(true);
@@ -79,7 +81,7 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
       clearInterval(timer);
       clearTimeout(closeButtonTimer);
     };
-  }, [minutes, seconds, closeButtonOpacity]);
+  }, [minutes, seconds]); // Removed closeButtonOpacity from dependencies
 
   const handleRedeemOffer = () => {
     if (fromCharacter && character) {
