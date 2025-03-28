@@ -1,262 +1,164 @@
-const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
+const { supabase } = require('./supabaseClient');
 
-// Initialize Supabase client
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY; 
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-/**
- * This script migrates existing local data to Supabase.
- * It assumes you have JSON files with users, chat history, etc.
- */
-async function migrateToSupabase() {
+async function migrateSchema() {
   try {
-    console.log('Starting migration to Supabase...');
+    // Check if tables exist and create if needed
+    await createTables();
     
-    // 1. Migrate Users
-    await migrateUsers();
+    // Enable RLS and create policies
+    await enableRLS();
     
-    // 2. Migrate Conversations
-    await migrateConversations();
+    // Create indexes
+    await createIndexes();
     
-    // 3. Migrate Character Interactions
-    await migrateCharacterInteractions();
+    // Add constraints
+    await addConstraints();
     
-    console.log('Migration completed successfully!');
+    console.log('Database migration completed successfully');
   } catch (error) {
     console.error('Migration failed:', error);
   }
 }
 
-async function migrateUsers() {
-  try {
-    console.log('Migrating users...');
+async function createTables() {
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT auth.uid(),
+      email TEXT NOT NULL UNIQUE,
+      username TEXT,
+      avatar_url TEXT,
+      display_name TEXT,
+      bio TEXT,
+      preferences JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`,
     
-    // Read users from JSON file (example path - adjust as needed)
-    const usersFilePath = path.join(__dirname, '../data/users.json');
+    `CREATE TABLE IF NOT EXISTS characters (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      avatar_url TEXT,
+      personality JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`,
     
-    if (!fs.existsSync(usersFilePath)) {
-      console.log('No users file found, skipping user migration');
-      return;
-    }
+    `CREATE TABLE IF NOT EXISTS conversations (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL,
+      character_id UUID NOT NULL,
+      title TEXT NOT NULL,
+      is_favorite BOOLEAN DEFAULT false,
+      character_data JSONB, 
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`,
     
-    const usersData = JSON.parse(fs.readFileSync(usersFilePath, 'utf8'));
+    `CREATE TABLE IF NOT EXISTS messages (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      conversation_id UUID NOT NULL,
+      role TEXT NOT NULL,
+      sender_type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      metadata JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`,
     
-    // For each user in the file
-    for (const user of usersData) {
-      // Check if user already exists in Supabase auth
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-      
-      if (existingUser) {
-        console.log(`User ${user.id} already exists, updating...`);
-        
-        // Update existing user
-        const { error } = await supabase
-          .from('users')
-          .update({
-            username: user.username,
-            display_name: user.displayName,
-            avatar_url: user.avatarUrl,
-            preferences: user.preferences || {},
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
-        
-        if (error) throw error;
-      } else {
-        console.log(`Creating new user ${user.id}...`);
-        
-        // Create new user profile
-        const { error } = await supabase
-          .from('users')
-          .insert({
-            id: user.id,
-            email: user.email,
-            username: user.username,
-            display_name: user.displayName,
-            avatar_url: user.avatarUrl,
-            preferences: user.preferences || {},
-          });
-        
-        if (error) throw error;
-      }
-    }
-    
-    console.log(`Migrated ${usersData.length} users successfully`);
-  } catch (error) {
-    console.error('User migration failed:', error);
-    throw error;
+    `CREATE TABLE IF NOT EXISTS user_characters (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL,
+      character_id UUID NOT NULL,
+      is_favorite BOOLEAN DEFAULT false,
+      last_interaction TIMESTAMP WITH TIME ZONE,
+      interaction_count INTEGER DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`
+  ];
+
+  for (const query of tables) {
+    const { error } = await supabase.rpc('sql', { query });
+    if (error) throw error;
   }
 }
 
-async function migrateConversations() {
-  try {
-    console.log('Migrating conversations and messages...');
+async function enableRLS() {
+  const rlsTables = ['users', 'conversations', 'messages', 'user_characters'];
+  
+  for (const table of rlsTables) {
+    const { error } = await supabase.rpc('sql', { 
+      query: `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY` 
+    });
+    if (error) throw error;
+  }
+  
+  // Add RLS policies from schema.sql
+  const policies = [
+    // Users table policies
+    `CREATE POLICY "Users can read own profile" ON users FOR SELECT USING (auth.uid() = id)`,
+    `CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id)`,
+    `CREATE POLICY "Users can insert own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id)`,
     
-    // Read conversations from JSON file (example path - adjust as needed)
-    const conversationsFilePath = path.join(__dirname, '../data/conversations.json');
+    // Conversations table policies
+    `CREATE POLICY "Users can read own conversations" ON conversations FOR SELECT USING (auth.uid() = user_id)`,
+    `CREATE POLICY "Users can insert own conversations" ON conversations FOR INSERT WITH CHECK (auth.uid() = user_id)`,
+    `CREATE POLICY "Users can update own conversations" ON conversations FOR UPDATE USING (auth.uid() = user_id)`,
+    `CREATE POLICY "Users can delete own conversations" ON conversations FOR DELETE USING (auth.uid() = user_id)`,
     
-    if (!fs.existsSync(conversationsFilePath)) {
-      console.log('No conversations file found, skipping conversation migration');
-      return;
-    }
+    // Messages table policies
+    `CREATE POLICY "Users can read messages from own conversations" ON messages FOR SELECT USING (
+      EXISTS (SELECT 1 FROM conversations WHERE conversations.id = messages.conversation_id AND conversations.user_id = auth.uid())
+    )`,
+    `CREATE POLICY "Users can insert messages to own conversations" ON messages FOR INSERT WITH CHECK (
+      EXISTS (SELECT 1 FROM conversations WHERE conversations.id = conversation_id AND conversations.user_id = auth.uid())
+    )`,
+    `CREATE POLICY "Users can delete messages from own conversations" ON messages FOR DELETE USING (
+      EXISTS (SELECT 1 FROM conversations WHERE conversations.id = conversation_id AND conversations.user_id = auth.uid())
+    )`,
     
-    const conversationsData = JSON.parse(fs.readFileSync(conversationsFilePath, 'utf8'));
-    
-    // For each conversation
-    for (const conversation of conversationsData) {
-      // Check if conversation already exists
-      const { data: existingConversation } = await supabase
-        .from('conversations')
-        .select('id')
-        .eq('user_id', conversation.userId)
-        .eq('character_id', conversation.characterId)
-        .single();
-      
-      let conversationId;
-      
-      if (existingConversation) {
-        console.log(`Conversation between user ${conversation.userId} and character ${conversation.characterId} already exists, updating...`);
-        conversationId = existingConversation.id;
-        
-        // Update existing conversation
-        const { error } = await supabase
-          .from('conversations')
-          .update({
-            title: conversation.title,
-            is_favorite: conversation.isFavorite || false,
-            character_data: conversation.characterData || {},
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', conversationId);
-        
-        if (error) throw error;
-      } else {
-        console.log(`Creating new conversation for user ${conversation.userId} and character ${conversation.characterId}...`);
-        
-        // Create new conversation
-        const { data, error } = await supabase
-          .from('conversations')
-          .insert({
-            user_id: conversation.userId,
-            character_id: conversation.characterId,
-            title: conversation.title,
-            is_favorite: conversation.isFavorite || false,
-            character_data: conversation.characterData || {},
-          })
-          .select('id')
-          .single();
-        
-        if (error) throw error;
-        conversationId = data.id;
-      }
-      
-      // Migrate messages for this conversation
-      if (conversation.messages && conversation.messages.length > 0) {
-        // First, delete existing messages to avoid duplicates
-        const { error: deleteError } = await supabase
-          .from('messages')
-          .delete()
-          .eq('conversation_id', conversationId);
-        
-        if (deleteError) throw deleteError;
-        
-        // Insert all messages
-        const messagesToInsert = conversation.messages.map(msg => ({
-          conversation_id: conversationId,
-          sender_type: msg.sender === 'user' ? 'user' : 'character',
-          content: msg.text,
-          metadata: msg.metadata || {},
-          created_at: new Date(msg.timestamp).toISOString()
-        }));
-        
-        const { error: insertError } = await supabase
-          .from('messages')
-          .insert(messagesToInsert);
-        
-        if (insertError) throw insertError;
-        
-        console.log(`Migrated ${messagesToInsert.length} messages for conversation ${conversationId}`);
-      }
-    }
-    
-    console.log(`Migrated ${conversationsData.length} conversations successfully`);
-  } catch (error) {
-    console.error('Conversation migration failed:', error);
-    throw error;
+    // User characters table policies
+    `CREATE POLICY "Users can read own character relationships" ON user_characters FOR SELECT USING (auth.uid() = user_id)`,
+    `CREATE POLICY "Users can insert own character relationships" ON user_characters FOR INSERT WITH CHECK (auth.uid() = user_id)`,
+    `CREATE POLICY "Users can update own character relationships" ON user_characters FOR UPDATE USING (auth.uid() = user_id)`,
+    `CREATE POLICY "Users can delete own character relationships" ON user_characters FOR DELETE USING (auth.uid() = user_id)`
+  ];
+
+  for (const policy of policies) {
+    const { error } = await supabase.rpc('sql', { query: policy });
+    if (error) throw error;
   }
 }
 
-async function migrateCharacterInteractions() {
-  try {
-    console.log('Migrating character interactions...');
-    
-    // Read character interactions from JSON file (example path - adjust as needed)
-    const interactionsFilePath = path.join(__dirname, '../data/characterInteractions.json');
-    
-    if (!fs.existsSync(interactionsFilePath)) {
-      console.log('No character interactions file found, skipping migration');
-      return;
-    }
-    
-    const interactionsData = JSON.parse(fs.readFileSync(interactionsFilePath, 'utf8'));
-    
-    // For each interaction
-    for (const interaction of interactionsData) {
-      // Check if interaction already exists
-      const { data: existingInteraction } = await supabase
-        .from('user_characters')
-        .select('id')
-        .eq('user_id', interaction.userId)
-        .eq('character_id', interaction.characterId)
-        .single();
-      
-      if (existingInteraction) {
-        console.log(`Interaction between user ${interaction.userId} and character ${interaction.characterId} already exists, updating...`);
-        
-        // Update existing interaction
-        const { error } = await supabase
-          .from('user_characters')
-          .update({
-            is_favorite: interaction.isFavorite || false,
-            last_interaction: interaction.lastInteraction ? new Date(interaction.lastInteraction).toISOString() : null,
-            interaction_count: interaction.interactionCount || 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingInteraction.id);
-        
-        if (error) throw error;
-      } else {
-        console.log(`Creating new interaction for user ${interaction.userId} and character ${interaction.characterId}...`);
-        
-        // Create new interaction
-        const { error } = await supabase
-          .from('user_characters')
-          .insert({
-            user_id: interaction.userId,
-            character_id: interaction.characterId,
-            is_favorite: interaction.isFavorite || false,
-            last_interaction: interaction.lastInteraction ? new Date(interaction.lastInteraction).toISOString() : null,
-            interaction_count: interaction.interactionCount || 1,
-          });
-        
-        if (error) throw error;
-      }
-    }
-    
-    console.log(`Migrated ${interactionsData.length} character interactions successfully`);
-  } catch (error) {
-    console.error('Character interaction migration failed:', error);
-    throw error;
+async function createIndexes() {
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_user_characters_last_interaction ON user_characters(last_interaction DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_user_characters_user_favorite ON user_characters(user_id, is_favorite)'
+  ];
+
+  for (const index of indexes) {
+    const { error } = await supabase.rpc('sql', { query: index });
+    if (error) throw error;
   }
 }
 
-// Run the migration
-migrateToSupabase(); 
+async function addConstraints() {
+  const constraints = [
+    'ALTER TABLE users ADD CONSTRAINT valid_email CHECK (email ~* \'^[A-Za-z0.9._%+-]+@[A-Za-z0.9.-]+\\.[A-Za-z]{2,}$\')',
+    'ALTER TABLE conversations ALTER COLUMN user_id SET NOT NULL, ALTER COLUMN character_id SET NOT NULL',
+    'ALTER TABLE messages ALTER COLUMN conversation_id SET NOT NULL, ALTER COLUMN content SET NOT NULL, ALTER COLUMN sender_type SET NOT NULL',
+    'ALTER TABLE user_characters ALTER COLUMN user_id SET NOT NULL, ALTER COLUMN character_id SET NOT NULL',
+    'ALTER TABLE messages DROP CONSTRAINT IF EXISTS fk_conversation, ADD CONSTRAINT fk_conversation FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE',
+    'ALTER TABLE user_characters DROP CONSTRAINT IF EXISTS fk_user, ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE'
+  ];
+
+  for (const constraint of constraints) {
+    const { error } = await supabase.rpc('sql', { query: constraint });
+    if (error) throw error;
+  }
+}
+
+migrateSchema();

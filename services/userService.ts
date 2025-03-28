@@ -1,123 +1,154 @@
 import { supabase } from '../utils/supabase';
-import { Session, User } from '@supabase/supabase-js';
+import { DatabaseService } from './databaseService';
+import { CacheService } from './cacheService';
+import { User } from '@supabase/supabase-js';
+import { UserProfile, DatabaseError, QueryOptions, Json } from '../types/database';
 
-export type UserProfile = {
-  id: string;
-  email: string;
-  username?: string;
-  avatar_url?: string;
-  display_name?: string;
-  bio?: string;
-  preferences?: Record<string, any>;
-  created_at?: string;
-  updated_at?: string;
-};
+const cache = CacheService.getInstance();
+const USER_CACHE_TTL = 5; // Cache user profiles for 5 minutes
 
-// Get the user profile
+/**
+ * Get the user profile with caching
+ */
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
-    return null;
-  }
+  const cacheKey = `user:${userId}`;
+  
+  return cache.getOrCompute(
+    cacheKey,
+    async () => DatabaseService.getById('users', userId),
+    USER_CACHE_TTL
+  );
 };
 
-// Create a new user profile after signup
+/**
+ * Create a new user profile after signup
+ */
 export const createUserProfile = async (user: User): Promise<UserProfile | null> => {
   try {
     // Check if profile already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', user.id)
-      .single();
-    
+    const existingUser = await DatabaseService.getById('users', user.id);
     if (existingUser) {
-      return getUserProfile(user.id);
+      return existingUser;
+    }
+
+    // Ensure we have an email
+    if (!user.email) {
+      throw new Error('Email is required');
     }
 
     // Create new profile
-    const newUser: UserProfile = {
+    const newUser = {
       id: user.id,
-      email: user.email || '',
-      username: user.email?.split('@')[0] || '',
-      display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '',
+      email: user.email,
+      username: user.email.split('@')[0],
+      display_name: user.user_metadata?.full_name || user.email.split('@')[0],
       avatar_url: user.user_metadata?.avatar_url || '',
     };
     
-    const { data, error } = await supabase
-      .from('users')
-      .insert(newUser)
-      .select('*')
-      .single();
+    const profile = await DatabaseService.insert('users', newUser);
     
-    if (error) throw error;
-    return data;
+    if (profile) {
+      // Update cache with new profile
+      cache.set(`user:${user.id}`, profile, USER_CACHE_TTL);
+    }
+    
+    return profile;
   } catch (error) {
     console.error('Error creating user profile:', error);
     return null;
   }
 };
 
-// Update a user profile
+/**
+ * Update a user profile
+ */
 export const updateUserProfile = async (
   userId: string,
   updates: Partial<UserProfile>
 ): Promise<UserProfile | null> => {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
-      .select('*')
-      .single();
+    const profile = await DatabaseService.update('users', userId, updates);
     
-    if (error) throw error;
-    return data;
+    if (profile) {
+      // Update cache with new profile data
+      cache.set(`user:${userId}`, profile, USER_CACHE_TTL);
+    }
+    
+    return profile;
   } catch (error) {
     console.error('Error updating user profile:', error);
     return null;
   }
 };
 
-// Update user preferences
+/**
+ * Update user preferences
+ */
 export const updateUserPreferences = async (
   userId: string,
   preferences: Record<string, any>
 ): Promise<boolean> => {
   try {
-    const { data: userData } = await supabase
-      .from('users')
-      .select('preferences')
-      .eq('id', userId)
-      .single();
-    
-    const currentPreferences = userData?.preferences || {};
+    const userData = await DatabaseService.getById('users', userId);
+    if (!userData) return false;
+
+    const currentPreferences = (userData.preferences as Record<string, any>) || {};
     const updatedPreferences = { ...currentPreferences, ...preferences };
     
-    const { error } = await supabase
-      .from('users')
-      .update({
-        preferences: updatedPreferences,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
+    const profile = await DatabaseService.update('users', userId, {
+      preferences: updatedPreferences as Json
+    });
     
-    if (error) throw error;
-    return true;
+    if (profile) {
+      // Update cache with new profile data
+      cache.set(`user:${userId}`, profile, USER_CACHE_TTL);
+      return true;
+    }
+    
+    return false;
   } catch (error) {
     console.error('Error updating user preferences:', error);
     return false;
   }
-}; 
+};
+
+/**
+ * Search users with pagination and filtering
+ */
+export const searchUsers = async (options?: QueryOptions) => {
+  return DatabaseService.query('users', options);
+};
+
+/**
+ * Delete user and all associated data
+ */
+export const deleteUser = async (userId: string): Promise<boolean> => {
+  try {
+    // Use transaction to ensure all user data is deleted
+    const result = await DatabaseService.transaction(async () => {
+      // Delete user profile (this will cascade to other tables via RLS)
+      const success = await DatabaseService.delete('users', userId);
+      
+      if (success) {
+        // Clear user data from cache
+        cache.delete(`user:${userId}`);
+        
+        // Delete user auth data from Supabase
+        const { error } = await supabase.auth.admin.deleteUser(userId);
+        if (error) throw error;
+        
+        return true;
+      }
+      
+      return false;
+    });
+    
+    return result || false;
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    return false;
+  }
+};
+
+// Initialize cleanup interval for expired cache items
+cache.startCleanupInterval(30); // Clean up every 30 minutes
