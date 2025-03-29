@@ -41,6 +41,8 @@ import { ThemeProvider, ThemeContext } from './contexts/ThemeContext';
 import SubscriptionScreen from './components/SubscriptionScreen';
 import SubscriptionOfferScreen from './components/SubscriptionOfferScreen';
 import DiscountOfferScreen from './components/DiscountOfferScreen';
+import TermsAndConditionsScreen from './components/TermsAndConditionsScreen';
+import PrivacyPolicyScreen from './components/PrivacyPolicyScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -63,6 +65,8 @@ type RootStackParamList = {
   SubscriptionScreen: { isSpecialOffer?: boolean };
   SubscriptionOfferScreen: undefined;
   DiscountOfferScreen: { fromCharacter?: boolean };
+  TermsAndConditions: undefined;
+  PrivacyPolicy: undefined;
 };
 
 type MainTabsParamList = {
@@ -489,14 +493,32 @@ const Navigation = () => {
               ...commonHeaderStyle,
             }} 
           />
-          <Stack.Screen 
-            name="ContactUs" 
-            component={ContactUsScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="ContactUs"
+            component={ContactUsScreen}
+            options={{
+              headerShown: true,
               title: 'Contact Us',
               ...commonHeaderStyle,
-            }} 
+            }}
+          />
+          <Stack.Screen
+            name="TermsAndConditions"
+            component={TermsAndConditionsScreen}
+            options={{
+              headerShown: true,
+              title: 'Terms & Conditions',
+              ...commonHeaderStyle,
+            }}
+          />
+          <Stack.Screen
+            name="PrivacyPolicy"
+            component={PrivacyPolicyScreen}
+            options={{
+              headerShown: true,
+              title: 'Privacy Policy',
+              ...commonHeaderStyle,
+            }}
           />
           <Stack.Screen 
             name="SubscriptionScreen" 

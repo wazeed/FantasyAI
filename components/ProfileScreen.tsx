@@ -20,7 +20,6 @@ const { width } = Dimensions.get('window');
 
 // Placeholder profile data
 const PROFILE_DATA = {
-  username: 'johnsmith',
   displayName: 'John Smith',
   bio: 'Fantasy AI enthusiast and avid storyteller. I love creating unique character interactions and exploring different narratives.',
   location: 'San Francisco, CA',
@@ -52,20 +51,13 @@ const PROFILE_DATA = {
 // Organize settings into categories for better structure
 const SETTINGS_CATEGORIES = [
   {
-    title: 'Account',
-    items: [
-      // { title: 'Edit Profile', icon: 'person-outline', screen: 'EditProfile' }, // Removed Edit Profile setting
-      { title: 'Privacy Settings', icon: 'shield-outline', screen: 'PrivacySettings' },
-      { title: 'Notification Settings', icon: 'notifications-outline', screen: 'NotificationSettings' },
-      { title: 'Security Settings', icon: 'lock-closed-outline', screen: 'SecuritySettings' },
-    ]
-  },
-  {
     title: 'Help & Support',
     items: [
-      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' }, 
+      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
       { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
-      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' }
+      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
+      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
+      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' }
     ]
   },
   {
@@ -76,15 +68,48 @@ const SETTINGS_CATEGORIES = [
   }
 ];
 
-export default function ProfileScreen({ navigation }) {
+interface SettingItem {
+  title: string;
+  icon: string;
+  screen?: string;
+  toggle?: boolean;
+  action?: string;
+}
+
+interface SettingsCategory {
+  title: string;
+  items: SettingItem[];
+}
+
+interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+}
+
+interface ProfileData {
+  displayName: string;
+  bio: string;
+  location: string;
+  email: string;
+  phone: string;
+  interests: string[];
+  achievements: Achievement[];
+}
+
+interface ProfileScreenProps {
+  navigation: any; // TODO: Replace with proper react-navigation type
+}
+
+export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const { user, signOut, isGuest } = useAuth();
   const { isDarkMode, toggleTheme } = useContext(ThemeContext); // Use useContext directly
-  const [profileData, setProfileData] = useState(PROFILE_DATA); // Allow setting profile data
+  const [profileData, setProfileData] = useState<ProfileData>({...PROFILE_DATA}); // Create new object
   const { navigate } = useNavigation();
-  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Force re-render
   const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
-  const [newUsername, setNewUsername] = useState(profileData.username);
   const [newDisplayName, setNewDisplayName] = useState(profileData.displayName);
   const [newBio, setNewBio] = useState(profileData.bio);
 
@@ -106,39 +131,23 @@ export default function ProfileScreen({ navigation }) {
     navigation.navigate(screenName);
   };
 
-  const handleEditUsernameClick = () => {
-    setNewUsername(profileData.username); // Reset input on edit start
-    setIsEditingUsername(true);
-  };
-
-  const handleSaveUsername = () => {
-    // TODO: Implement actual username update logic (e.g., call API)
-    console.log('Saving new username:', newUsername);
-    // Update local state for immediate feedback (replace with actual data update)
-    setProfileData({ ...profileData, username: newUsername });
-    setIsEditingUsername(false);
-    Alert.alert('Username Updated', `Your username has been changed to ${newUsername}`);
-  };
-
   const handleEditDisplayNameClick = () => {
     setNewDisplayName(profileData.displayName);
     setIsEditingDisplayName(true);
   };
 
   const handleSaveDisplayName = () => {
-    setProfileData({ ...profileData, displayName: newDisplayName });
+    const updatedProfile = {...profileData, displayName: newDisplayName};
+    setProfileData(updatedProfile);
     setIsEditingDisplayName(false);
     Alert.alert('Display Name Updated', `Your display name has been changed to ${newDisplayName}`);
+    // Force update by creating new object reference
+    setProfileData({...updatedProfile});
   };
 
   const handleCancelDisplayNameEdit = () => {
     setIsEditingDisplayName(false);
     setNewDisplayName(profileData.displayName);
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditingUsername(false);
-    setNewUsername(profileData.username); // Revert to original username
   };
 
   const handleEditBioClick = () => {
@@ -163,13 +172,13 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  const renderInterestItem = (interest, index) => (
+  const renderInterestItem = (interest: string, index: number) => (
     <View key={index} style={[styles.interestItem, { backgroundColor: colors.lightBackground }]}>
       <Text style={[styles.interestText, { color: colors.text }]}>{interest}</Text>
     </View>
   );
 
-  const renderAchievementItem = (achievement) => (
+  const renderAchievementItem = (achievement: Achievement) => (
     <View key={achievement.id} style={[styles.achievementItem, { backgroundColor: isDarkMode ? '#252525' : '#F9F9F9' }]}>
       <View style={styles.achievementIcon}>
         <Text style={styles.achievementIconText}>🏆</Text>
@@ -184,7 +193,7 @@ export default function ProfileScreen({ navigation }) {
     </View>
   );
 
-  const renderSettingItem = (item) => {
+  const renderSettingItem = (item: SettingItem) => {
     const isToggle = item.toggle;
     
     return (
@@ -206,13 +215,13 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
-  const renderSettingsCategory = (category, index) => (
+  const renderSettingsCategory = (category: SettingsCategory, index: number) => (
     <View key={index} style={[styles.settingsCategoryContainer, index !== 0 && { marginTop: 24 }]}>
       <View style={[styles.settingsCategoryHeader, { backgroundColor: colors.card }]}>
         <Text style={[styles.settingsCategoryTitle, { color: colors.text }]}>{category.title}</Text>
       </View>
       <View style={[styles.settingsList, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        {category.items.map(item => renderSettingItem(item))}
+        {category.items.map((item: SettingItem) => renderSettingItem(item))}
       </View>
     </View>
   );
@@ -253,51 +262,16 @@ export default function ProfileScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.usernameDisplayContainer}>
+            <View style={[styles.usernameDisplayContainer, {flexDirection: 'row', alignItems: 'center'}]}>
               <Text style={[styles.displayName, { color: colors.text }]}>
                 {isGuest ? 'Guest User' : profileData.displayName}
               </Text>
-              {!isGuest && (
-                <TouchableOpacity onPress={handleEditDisplayNameClick} style={styles.editIcon}>
-                  <Ionicons name="create-outline" size={18} color={colors.subText} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity onPress={handleEditDisplayNameClick} style={[styles.editIcon, {marginLeft: 8}]}>
+                <Ionicons name="create-outline" size={18} color={colors.subText} />
+              </TouchableOpacity>
             </View>
           )}
           
-          {/* Username Display/Edit Section */}
-          <View style={styles.usernameSection}>
-            {isEditingUsername ? (
-              <View style={styles.editUsernameContainer}>
-                <TextInput
-                  style={[styles.usernameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
-                  value={newUsername}
-                  onChangeText={setNewUsername}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder="Enter new username"
-                  placeholderTextColor={colors.subText}
-                />
-                <TouchableOpacity onPress={handleSaveUsername} style={[styles.editUsernameButton, { backgroundColor: colors.accent }]}>
-                  <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleCancelEdit} style={[styles.editUsernameButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
-                  <Ionicons name="close-outline" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.usernameDisplayContainer}>
-                <Text style={[styles.username, { color: colors.subText }]}>
-                  @{isGuest ? 'guest' : profileData.username}
-                </Text>
-                {!isGuest && (
-                   <TouchableOpacity onPress={handleEditUsernameClick} style={styles.editIcon}>
-                     <Ionicons name="create-outline" size={18} color={colors.subText} />
-                   </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
           
           {isEditingBio ? (
             <View style={styles.editBioContainer}>
