@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Dimensions,
+  TextInput, // Added TextInput
+  Alert, // Added Alert for feedback
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
@@ -52,7 +54,7 @@ const SETTINGS_CATEGORIES = [
   {
     title: 'Account',
     items: [
-      { title: 'Edit Profile', icon: 'person-outline', screen: 'EditProfile' },
+      // { title: 'Edit Profile', icon: 'person-outline', screen: 'EditProfile' }, // Removed Edit Profile setting
       { title: 'Privacy Settings', icon: 'shield-outline', screen: 'PrivacySettings' },
       { title: 'Notification Settings', icon: 'notifications-outline', screen: 'NotificationSettings' },
       { title: 'Security Settings', icon: 'lock-closed-outline', screen: 'SecuritySettings' },
@@ -76,9 +78,15 @@ const SETTINGS_CATEGORIES = [
 
 export default function ProfileScreen({ navigation }) {
   const { user, signOut, isGuest } = useAuth();
-  const { isDarkMode, toggleTheme } = React.useContext(ThemeContext);
-  const [profileData] = useState(PROFILE_DATA);
+  const { isDarkMode, toggleTheme } = useContext(ThemeContext); // Use useContext directly
+  const [profileData, setProfileData] = useState(PROFILE_DATA); // Allow setting profile data
   const { navigate } = useNavigation();
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [newUsername, setNewUsername] = useState(profileData.username);
+  const [newDisplayName, setNewDisplayName] = useState(profileData.displayName);
+  const [newBio, setNewBio] = useState(profileData.bio);
 
   // Dynamic colors based on theme
   const colors = {
@@ -92,15 +100,62 @@ export default function ProfileScreen({ navigation }) {
     accent: '#4F46E5'
   };
 
-  const handleEditProfile = () => {
-    navigation.navigate('EditProfile');
-  };
+  // Removed handleEditProfile function
 
-  const navigateToScreen = (screenName) => {
+  const navigateToScreen = (screenName: string) => { // Added type annotation
     navigation.navigate(screenName);
   };
 
-  const handleActionPress = (action, screen) => {
+  const handleEditUsernameClick = () => {
+    setNewUsername(profileData.username); // Reset input on edit start
+    setIsEditingUsername(true);
+  };
+
+  const handleSaveUsername = () => {
+    // TODO: Implement actual username update logic (e.g., call API)
+    console.log('Saving new username:', newUsername);
+    // Update local state for immediate feedback (replace with actual data update)
+    setProfileData({ ...profileData, username: newUsername });
+    setIsEditingUsername(false);
+    Alert.alert('Username Updated', `Your username has been changed to ${newUsername}`);
+  };
+
+  const handleEditDisplayNameClick = () => {
+    setNewDisplayName(profileData.displayName);
+    setIsEditingDisplayName(true);
+  };
+
+  const handleSaveDisplayName = () => {
+    setProfileData({ ...profileData, displayName: newDisplayName });
+    setIsEditingDisplayName(false);
+    Alert.alert('Display Name Updated', `Your display name has been changed to ${newDisplayName}`);
+  };
+
+  const handleCancelDisplayNameEdit = () => {
+    setIsEditingDisplayName(false);
+    setNewDisplayName(profileData.displayName);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingUsername(false);
+    setNewUsername(profileData.username); // Revert to original username
+  };
+
+  const handleEditBioClick = () => {
+    setIsEditingBio(true);
+  };
+
+  const handleSaveBio = () => {
+    setProfileData({ ...profileData, bio: newBio });
+    setIsEditingBio(false);
+  };
+
+  const handleCancelBioEdit = () => {
+    setIsEditingBio(false);
+    setNewBio(profileData.bio);
+  };
+
+  const handleActionPress = (action: string | undefined, screen: string | undefined) => { // Added types
     if (action === 'toggleTheme') {
       toggleTheme();
     } else if (screen) {
@@ -180,61 +235,106 @@ export default function ProfileScreen({ navigation }) {
             </TouchableOpacity>
           </View>
           
-          <Text style={[styles.displayName, { color: colors.text }]}>
-            {isGuest ? 'Guest User' : profileData.displayName}
-          </Text>
-          
-          <Text style={[styles.username, { color: colors.subText }]}>
-            @{isGuest ? 'guest' : profileData.username}
-          </Text>
-          
-          {!isGuest && (
-            <Text style={[styles.bio, { color: colors.text }]}>
-              {profileData.bio}
-            </Text>
+          {isEditingDisplayName ? (
+            <View style={styles.editUsernameContainer}>
+              <TextInput
+                style={[styles.usernameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
+                value={newDisplayName}
+                onChangeText={setNewDisplayName}
+                autoCapitalize="words"
+                placeholder="Enter display name"
+                placeholderTextColor={colors.subText}
+              />
+              <TouchableOpacity onPress={handleSaveDisplayName} style={[styles.editUsernameButton, { backgroundColor: colors.accent }]}>
+                <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCancelDisplayNameEdit} style={[styles.editUsernameButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
+                <Ionicons name="close-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.usernameDisplayContainer}>
+              <Text style={[styles.displayName, { color: colors.text }]}>
+                {isGuest ? 'Guest User' : profileData.displayName}
+              </Text>
+              {!isGuest && (
+                <TouchableOpacity onPress={handleEditDisplayNameClick} style={styles.editIcon}>
+                  <Ionicons name="create-outline" size={18} color={colors.subText} />
+                </TouchableOpacity>
+              )}
+            </View>
           )}
           
-          <TouchableOpacity
-            style={[styles.editProfileButton, { borderColor: colors.border }]}
-            onPress={handleEditProfile}
-          >
-            <Ionicons name="create-outline" size={18} color={colors.text} style={styles.editButtonIcon} />
-            <Text style={[styles.editButtonText, { color: colors.text }]}>Edit Profile</Text>
-          </TouchableOpacity>
+          {/* Username Display/Edit Section */}
+          <View style={styles.usernameSection}>
+            {isEditingUsername ? (
+              <View style={styles.editUsernameContainer}>
+                <TextInput
+                  style={[styles.usernameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
+                  value={newUsername}
+                  onChangeText={setNewUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="Enter new username"
+                  placeholderTextColor={colors.subText}
+                />
+                <TouchableOpacity onPress={handleSaveUsername} style={[styles.editUsernameButton, { backgroundColor: colors.accent }]}>
+                  <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleCancelEdit} style={[styles.editUsernameButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
+                  <Ionicons name="close-outline" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.usernameDisplayContainer}>
+                <Text style={[styles.username, { color: colors.subText }]}>
+                  @{isGuest ? 'guest' : profileData.username}
+                </Text>
+                {!isGuest && (
+                   <TouchableOpacity onPress={handleEditUsernameClick} style={styles.editIcon}>
+                     <Ionicons name="create-outline" size={18} color={colors.subText} />
+                   </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+          
+          {isEditingBio ? (
+            <View style={styles.editBioContainer}>
+              <TextInput
+                style={[styles.bioInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
+                value={newBio}
+                onChangeText={setNewBio}
+                multiline
+                numberOfLines={4}
+                placeholder="Tell us about yourself"
+                placeholderTextColor={colors.subText}
+              />
+              <View style={styles.bioButtonContainer}>
+                <TouchableOpacity onPress={handleSaveBio} style={[styles.editBioButton, { backgroundColor: colors.accent }]}>
+                  <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleCancelBioEdit} style={[styles.editBioButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
+                  <Ionicons name="close-outline" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.bioDisplayContainer}>
+              <Text style={[styles.bio, { color: colors.text }]}>
+                {profileData.bio || 'Tell us about yourself'}
+              </Text>
+              <TouchableOpacity onPress={handleEditBioClick} style={styles.editIcon}>
+                <Ionicons name="create-outline" size={18} color={colors.subText} />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* Removed Edit Profile Button */}
+          
         </View>
         
-        {/* Info Cards */}
-        {!isGuest && (
-          <>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <View style={styles.infoHeader}>
-                <Ionicons name="location-outline" size={20} color={colors.text} />
-                <Text style={[styles.infoTitle, { color: colors.text }]}>Location</Text>
-              </View>
-              <Text style={[styles.infoText, { color: colors.subText }]}>{profileData.location}</Text>
-            </View>
-            
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <View style={styles.infoHeader}>
-                <Ionicons name="heart-outline" size={20} color={colors.text} />
-                <Text style={[styles.infoTitle, { color: colors.text }]}>Interests</Text>
-              </View>
-              <View style={styles.interestsContainer}>
-                {profileData.interests.map((interest, index) => renderInterestItem(interest, index))}
-              </View>
-            </View>
-            
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <View style={styles.infoHeader}>
-                <Ionicons name="trophy-outline" size={20} color={colors.text} />
-                <Text style={[styles.infoTitle, { color: colors.text }]}>Achievements</Text>
-              </View>
-              <View style={styles.achievementsContainer}>
-                {profileData.achievements.map((achievement) => renderAchievementItem(achievement))}
-              </View>
-            </View>
-          </>
-        )}
+        {/* Removed Achievements section */}
         
         {/* Settings */}
         <View style={[styles.settingsContainer, { backgroundColor: colors.card }]}>
@@ -467,6 +567,71 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Username editing styles
+  usernameSection: {
+    marginBottom: 16,
+    width: '100%',
+  },
+  editUsernameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  usernameInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    marginRight: 8,
+  },
+  editUsernameButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  usernameDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editIcon: {
+    marginLeft: 8,
+  },
+  // Bio editing styles
+  editBioContainer: {
+    marginTop: 12,
+    width: '100%',
+  },
+  bioInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  bioButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  editBioButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bioDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 12,
   },
   versionText: {
     fontSize: 14,
