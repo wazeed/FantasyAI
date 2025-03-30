@@ -1,85 +1,5 @@
-import React, { useState, useContext } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  Dimensions,
-  TextInput, // Added TextInput
-  Alert, // Added Alert for feedback
-} from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
-import { ThemeContext } from '../contexts/ThemeContext';
-import { useNavigation } from '@react-navigation/native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-
-const { width } = Dimensions.get('window');
-
-// Placeholder profile data
-const PROFILE_DATA = {
-  displayName: 'John Smith',
-  bio: 'Fantasy AI enthusiast and avid storyteller. I love creating unique character interactions and exploring different narratives.',
-  location: 'San Francisco, CA',
-  email: 'john.smith@example.com',
-  phone: '+1 (555) 123-4567',
-  interests: ['AI Characters', 'Storytelling', 'Science Fiction', 'Fantasy Worlds', 'Interactive Fiction'],
-  achievements: [
-    { 
-      id: '1', 
-      title: 'Story Master',
-      description: 'Created 50+ unique conversations',
-      date: '2023-12-01' 
-    },
-    { 
-      id: '2', 
-      title: 'Conversation Explorer',
-      description: 'Talked with 20 different characters',
-      date: '2023-11-15' 
-    },
-    { 
-      id: '3', 
-      title: 'Premium Member',
-      description: 'Subscribed to Fantasy AI Pro',
-      date: '2023-10-30' 
-    }
-  ]
-};
-
-// Organize settings into categories for better structure
-const SETTINGS_CATEGORIES = [
-  {
-    title: 'Help & Support',
-    items: [
-      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
-      { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
-      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
-      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
-      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' }
-    ]
-  },
-  {
-    title: 'Preferences',
-    items: [
-      { title: 'Dark Mode', icon: 'moon-outline', toggle: true, action: 'toggleTheme' }
-    ]
-  }
-];
-
-interface SettingItem {
-  title: string;
-  icon: string;
-  screen?: string;
-  toggle?: boolean;
-  action?: string;
-}
-
-interface SettingsCategory {
-  title: string;
-  items: SettingItem[];
-}
+import React, { useState, useContext, useEffect } from 'react';
+import { ProfileTabScreenProps } from '../types/screens';
 
 interface Achievement {
   id: string;
@@ -98,20 +18,146 @@ interface ProfileData {
   achievements: Achievement[];
 }
 
-interface ProfileScreenProps {
-  navigation: any; // TODO: Replace with proper react-navigation type
+interface SettingItem {
+  title: string;
+  icon: string;
+  screen?: string;
+  toggle?: boolean;
+  action?: string;
 }
 
-export default function ProfileScreen({ navigation }: ProfileScreenProps) {
+interface SettingsCategory {
+  title: string;
+  items: SettingItem[];
+}
+
+const SETTINGS_CATEGORIES: SettingsCategory[] = [
+  {
+    title: 'Help & Support',
+    items: [
+      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
+      { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
+      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
+      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
+      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' }
+    ]
+  },
+  {
+    title: 'Preferences',
+    items: [
+      { title: 'Dark Mode', icon: 'moon-outline', toggle: true, action: 'toggleTheme' }
+    ]
+  }
+];
+
+const PROFILE_DATA: ProfileData = {
+  displayName: 'John Smith',
+  bio: 'Fantasy AI enthusiast and avid storyteller. I love creating unique character interactions and exploring different narratives.',
+  location: 'San Francisco, CA',
+  email: 'john.smith@example.com',
+  phone: '+1 (555) 123-4567',
+  interests: ['AI Characters', 'Storytelling', 'Science Fiction', 'Fantasy Worlds', 'Interactive Fiction'],
+  achievements: [
+    {
+      id: '1',
+      title: 'Story Master',
+      description: 'Created 50+ unique conversations',
+      date: '2023-12-01'
+    },
+    {
+      id: '2',
+      title: 'Conversation Explorer',
+      description: 'Talked with 20 different characters',
+      date: '2023-11-15'
+    },
+    {
+      id: '3',
+      title: 'Premium Member',
+      description: 'Subscribed to Fantasy AI Pro',
+      date: '2023-10-30'
+    }
+  ]
+};
+import { supabase } from '../utils/supabase';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  Dimensions,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../contexts/AuthContext';
+import { ThemeContext } from '../contexts/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
+const { width } = Dimensions.get('window');
+
+export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
   const { user, signOut, isGuest } = useAuth();
-  const { isDarkMode, toggleTheme } = useContext(ThemeContext); // Use useContext directly
-  const [profileData, setProfileData] = useState<ProfileData>({...PROFILE_DATA}); // Create new object
-  const { navigate } = useNavigation();
-  const [refreshKey, setRefreshKey] = useState(0); // Force re-render
+  const themeContext = useContext(ThemeContext);
+  if (!themeContext) {
+    throw new Error('ThemeContext must be used within a ThemeProvider');
+  }
+  const { isDarkMode, toggleTheme } = themeContext;
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [profileData, setProfileData] = useState<ProfileData>(PROFILE_DATA);
   const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState(profileData.displayName);
   const [newBio, setNewBio] = useState(profileData.bio);
+  const { navigate } = useNavigation();
+
+  useEffect(() => {
+    const loadProfileData = async () => {
+      setIsLoading(true);
+      try {
+        if (isGuest) {
+          // Load guest profile from AsyncStorage
+          const guestProfile = await AsyncStorage.getItem('guestProfile');
+          if (guestProfile) {
+            setProfileData(JSON.parse(guestProfile));
+          }
+        } else if (user?.id) {
+          // Load authenticated user profile from Supabase
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+
+          if (error) throw error;
+
+          if (data) {
+            setProfileData({
+              displayName: data.display_name || PROFILE_DATA.displayName,
+              bio: data.bio || PROFILE_DATA.bio,
+              location: data.location || PROFILE_DATA.location,
+              email: user.email || PROFILE_DATA.email,
+              phone: data.phone || PROFILE_DATA.phone,
+              interests: data.interests || PROFILE_DATA.interests,
+              achievements: PROFILE_DATA.achievements
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        Alert.alert('Error', 'Failed to load profile data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProfileData();
+  }, [user?.id, isGuest]);
 
   // Dynamic colors based on theme
   const colors = {
@@ -136,13 +182,47 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     setIsEditingDisplayName(true);
   };
 
-  const handleSaveDisplayName = () => {
-    const updatedProfile = {...profileData, displayName: newDisplayName};
-    setProfileData(updatedProfile);
-    setIsEditingDisplayName(false);
-    Alert.alert('Display Name Updated', `Your display name has been changed to ${newDisplayName}`);
-    // Force update by creating new object reference
-    setProfileData({...updatedProfile});
+  const isGuestUser = () => {
+    return !user?.id;
+  };
+
+  const handleSaveDisplayName = async () => {
+    setIsSaving(true);
+    try {
+      if (isGuestUser()) {
+        // Save to AsyncStorage for guest users
+        await AsyncStorage.setItem('guestProfile', JSON.stringify({
+          ...profileData,
+          displayName: newDisplayName
+        }));
+      } else {
+        // Save to Supabase for authenticated users
+        if (!user?.id) {
+          throw new Error('User not authenticated');
+        }
+        const { error } = await supabase
+          .from('users')
+          .update({
+            display_name: newDisplayName,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+
+        if (error) throw error;
+      }
+
+      setProfileData(prevData => ({
+        ...prevData,
+        displayName: newDisplayName
+      }));
+      setIsEditingDisplayName(false);
+      Alert.alert('Success', 'Display name updated successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update display name');
+      console.error('Update error:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancelDisplayNameEdit = () => {
@@ -154,9 +234,40 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     setIsEditingBio(true);
   };
 
-  const handleSaveBio = () => {
-    setProfileData({ ...profileData, bio: newBio });
-    setIsEditingBio(false);
+  const handleSaveBio = async () => {
+    setIsSaving(true);
+    try {
+      if (isGuestUser()) {
+        // Save to AsyncStorage for guest users
+        await AsyncStorage.setItem('guestProfile', JSON.stringify({
+          ...profileData,
+          bio: newBio
+        }));
+      } else if (user?.id) {
+        // Save to Supabase for authenticated users
+        const { error } = await supabase
+          .from('users')
+          .update({
+            bio: newBio,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+
+        if (error) throw error;
+      }
+
+      setProfileData(prevData => ({
+        ...prevData,
+        bio: newBio
+      }));
+      setIsEditingBio(false);
+      Alert.alert('Success', 'Bio updated successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update bio');
+      console.error('Update error:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancelBioEdit = () => {
@@ -254,17 +365,39 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 placeholder="Enter display name"
                 placeholderTextColor={colors.subText}
               />
-              <TouchableOpacity onPress={handleSaveDisplayName} style={[styles.editUsernameButton, { backgroundColor: colors.accent }]}>
-                <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+              <TouchableOpacity
+                onPress={handleSaveDisplayName}
+                disabled={isSaving}
+                style={[
+                  styles.editUsernameButton,
+                  { backgroundColor: isSaving ? colors.subText : colors.accent }
+                ]}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+                )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleCancelDisplayNameEdit} style={[styles.editUsernameButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
+              <TouchableOpacity
+                onPress={handleCancelDisplayNameEdit}
+                disabled={isSaving}
+                style={[
+                  styles.editUsernameButton,
+                  {
+                    backgroundColor: colors.subText,
+                    marginLeft: 8,
+                    opacity: isSaving ? 0.5 : 1
+                  }
+                ]}
+              >
                 <Ionicons name="close-outline" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           ) : (
             <View style={[styles.usernameDisplayContainer, {flexDirection: 'row', alignItems: 'center'}]}>
               <Text style={[styles.displayName, { color: colors.text }]}>
-                {isGuest ? 'Guest User' : profileData.displayName}
+                {profileData.displayName}
               </Text>
               <TouchableOpacity onPress={handleEditDisplayNameClick} style={[styles.editIcon, {marginLeft: 8}]}>
                 <Ionicons name="create-outline" size={18} color={colors.subText} />
@@ -285,8 +418,19 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 placeholderTextColor={colors.subText}
               />
               <View style={styles.bioButtonContainer}>
-                <TouchableOpacity onPress={handleSaveBio} style={[styles.editBioButton, { backgroundColor: colors.accent }]}>
-                  <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+                <TouchableOpacity
+                  onPress={handleSaveBio}
+                  disabled={isSaving}
+                  style={[
+                    styles.editBioButton,
+                    { backgroundColor: isSaving ? colors.subText : colors.accent }
+                  ]}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleCancelBioEdit} style={[styles.editBioButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
                   <Ionicons name="close-outline" size={20} color="#FFFFFF" />
