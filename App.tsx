@@ -321,7 +321,7 @@ function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationP
   
   return (
     <View style={{ flex: 1 }}>
-      <ProfileScreen navigation={navigation} />
+      <ProfileScreen navigation={navigation} route={{key: 'ProfileTab', name: 'ProfileTab', params: undefined}} />
       <View style={[styles.resetButtonContainer, { backgroundColor: isDarkMode ? '#121212' : '#FFFFFF' }]}>
         <TouchableOpacity
           style={[styles.resetButton, { backgroundColor: isDarkMode ? '#333333' : '#F0F0F0' }]}
