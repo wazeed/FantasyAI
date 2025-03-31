@@ -39,26 +39,24 @@ type Category = {
   selected: boolean;
 };
 
+// Updated ParamList to potentially include icon info later
+type CharacterParams = {
+  id: string;
+  name: string;
+  avatar: any; // Keep image for chat screen compatibility for now
+  description?: string;
+  tags?: string[];
+  category?: string;
+  iconName?: keyof typeof Ionicons.glyphMap; // Optional icon info
+  iconColor?: string; // Optional icon info
+};
+
 type RootStackParamList = {
   Home: undefined;
-  Chat: { character: {
-    id: string;
-    name: string;
-    avatar: any; // Keep image for chat screen compatibility for now
-    description?: string;
-    tags?: string[];
-    category?: string;
-  }};
+  Chat: { character: CharacterParams };
   DiscountOfferScreen: {
     fromCharacter: boolean;
-    character: {
-      id: string;
-      name: string;
-      avatar: any;
-      description?: string;
-      tags?: string[];
-      category?: string;
-    }
+    character: CharacterParams;
   };
   Profile: undefined;
   HelpCenter: undefined;
@@ -369,7 +367,6 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     categorySelected: isDarkMode ? '#3D8CFF' : '#7E3AF2',
     categoryText: isDarkMode ? '#FFFFFF' : '#000000',
     searchBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
-    // Removed tag styles as they are no longer used
     buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
   };
 
@@ -404,6 +401,18 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   };
 
   const handleToolPress = async (tool: Tool) => {
+    const iconInfo = TOOL_ICONS[tool.id] || { name: 'help-circle-outline', color: colors.accent };
+    const characterData: CharacterParams = {
+      id: tool.id,
+      name: tool.name,
+      avatar: tool.image, // Keep image for now
+      description: tool.description,
+      tags: tool.tags,
+      category: tool.category,
+      iconName: iconInfo.name, // Pass icon info
+      iconColor: iconInfo.color, // Pass icon info
+    };
+
     if (isGuest) {
       // For guest users, check if we should show the discount offer
       try {
@@ -416,14 +425,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           // Navigate to discount offer screen
           navigation.navigate('DiscountOfferScreen', {
             fromCharacter: true,
-            character: {
-              id: tool.id,
-              name: tool.name,
-              avatar: tool.image, // Keep image for now for chat screen
-              description: tool.description,
-              tags: tool.tags,
-              category: tool.category
-            }
+            character: characterData // Pass character data with icon info
           });
           return;
         }
@@ -434,14 +436,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     
     // Otherwise proceed to tool - map tool to character format
     navigation.navigate('Chat', {
-      character: {
-        id: tool.id,
-        name: tool.name,
-        avatar: tool.image, // Keep image for now for chat screen
-        description: tool.description,
-        tags: tool.tags,
-        category: tool.category
-      }
+      character: characterData // Pass character data with icon info
     });
   };
 
@@ -535,11 +530,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       
       <View style={[styles.header, isDarkMode ? styles.darkHeader : styles.lightHeader]}>
         <View style={styles.headerLeft}>
-          <Image source={require('../assets/logo.png')} style={styles.logo} />
+          {/* <Image source={require('../assets/logo.png')} style={styles.logo} /> */}
           <Text style={[styles.appName, isDarkMode ? styles.darkAppName : styles.lightAppName]}>
-            Fantasy AI
+            AI ChatBot {/* Updated Header Text */}
           </Text>
         </View>
+        {/* Optional: Add settings/profile icon back if needed */}
+        {/* <TouchableOpacity onPress={navigateToProfile}>
+          <Ionicons name="person-circle-outline" size={30} color={colors.text} />
+        </TouchableOpacity> */}
       </View>
       
       <View style={[styles.searchContainer, { backgroundColor: colors.searchBg }]}>
@@ -547,7 +546,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         <TextInput
           ref={searchInputRef}
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search tools..."
+          placeholder="Search AI assistants..." // Updated Placeholder
           placeholderTextColor={colors.subText}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -594,15 +593,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    justifyContent: 'space-between', // Changed to space-between if profile icon added back
+    paddingHorizontal: PADDING_HORIZONTAL,
+    paddingTop: 12, // Adjust as needed
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
   darkHeader: {
     borderBottomColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1A1A1A', // Slightly different dark background for header
   },
   lightHeader: {
     borderBottomColor: '#F0F0F0',
@@ -612,14 +611,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logo: {
+  logo: { // Keep if logo is added back
     width: 32,
     height: 32,
     marginRight: 8,
   },
   appName: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20, // Adjusted size
+    fontWeight: '600', // Adjusted weight
   },
   darkAppName: {
     color: '#FFFFFF',
@@ -635,7 +634,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 24,
+    borderRadius: 12, // Slightly less rounded
     borderWidth: 1,
     borderColor: '#333333', // Default border, adjust if needed
   },
@@ -659,38 +658,6 @@ const styles = StyleSheet.create({
   },
   lightSearchInput: { // Keep for potential theme adjustments
     color: '#000000',
-  },
-  sectionHeader: { // Keep if needed elsewhere
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: PADDING_HORIZONTAL,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  sectionTitle: { // Keep if needed elsewhere
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  darkSectionTitle: { // Keep if needed elsewhere
-    color: '#FFFFFF',
-  },
-  lightSectionTitle: { // Keep if needed elsewhere
-    color: '#000000',
-  },
-  viewAllButton: { // Keep if needed elsewhere
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewAllText: { // Keep if needed elsewhere
-    fontSize: 14,
-    marginRight: 4,
-  },
-  darkViewAllText: { // Keep if needed elsewhere
-    color: '#0070F3',
-  },
-  lightViewAllText: { // Keep if needed elsewhere
-    color: '#0070F3',
   },
   categoriesList: {
     paddingLeft: PADDING_HORIZONTAL,
@@ -734,6 +701,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
     // Width is set dynamically
+    alignItems: 'flex-start', // Align content to the start
   },
   darkCard: {
     backgroundColor: '#1E1E1E',
@@ -745,13 +713,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, // Add subtle border in light mode
     borderColor: '#F0F0F0',
   },
-  iconContainer: { // Added style for icon container
+  iconContainer: { // Style for the new icon container
     width: 56, // Match reference image size
     height: 56,
     borderRadius: 12, // Rounded square
     justifyContent: 'center',
     alignItems: 'center',
-    // alignSelf: 'flex-start', // Align icon to the start of the card - Removed for centering
+    // alignSelf: 'flex-start', // Align icon to the start of the card
     margin: 14, // Add margin around the icon container
     marginBottom: 8, // Reduced bottom margin
   },
@@ -759,6 +727,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, // Horizontal padding
     paddingBottom: 14, // Bottom padding
     paddingTop: 0, // Remove top padding as icon is above
+    alignSelf: 'stretch', // Ensure info takes full width below icon
   },
   toolName: {
     fontSize: 16, // Slightly smaller font size
