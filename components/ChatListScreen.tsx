@@ -10,12 +10,15 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator, // Added for loading state
+  Animated, // Import Animated from react-native
 } from 'react-native';
 import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native'; // Added useFocusEffect
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Added AsyncStorage
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+// Reanimated imports (if using reanimated v2+)
+// import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useTheme } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext'; // Added useAuth
 import * as conversationService from '../services/conversationService'; // Added conversationService
@@ -61,18 +64,12 @@ const formatTimeAgo = (timestamp: string | null): string => {
     console.error("Error formatting date:", e);
     return ''; // Return empty string or a default value on error
   }
-};
-
-
-type TrendingCharacter = {
-  id: string;
-  name: string;
-  description: string;
-  avatar: any;
-};
-
-// Placeholder function to get parent navigator (adjust based on actual structure)
-const getParentNavigator = (navigation: ChatListScreenNavigationProp): NavigationProp<RootStackParamList> | undefined => {
+  };
+  
+  // Removed TrendingCharacter type
+  
+  // Placeholder function to get parent navigator (adjust based on actual structure)
+  const getParentNavigator = (navigation: ChatListScreenNavigationProp): NavigationProp<RootStackParamList> | undefined => {
   try {
     // This might need adjustment depending on your navigator setup
     return navigation.getParent<NavigationProp<RootStackParamList>>();
@@ -89,7 +86,7 @@ export default function ChatListScreen({ navigation }: { navigation: ChatListScr
   const { width } = useWindowDimensions();
 
   const [recentChats, setRecentChats] = React.useState<ChatSession[]>([]);
-  const [trendingCharacters, setTrendingCharacters] = React.useState<TrendingCharacter[]>([]); // Keep or remove trending based on design
+  // Removed trendingCharacters state
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const { user, isGuest } = useAuth();
@@ -193,24 +190,10 @@ export default function ChatListScreen({ navigation }: { navigation: ChatListScr
     }, [isGuest, user]) // Rerun effect if user status changes
   );
 
-  // --- Placeholder for Trending Characters (can be removed or fetched separately) ---
-   React.useEffect(() => {
-     const loadTrending = async () => {
-       // Simulate fetching trending characters
-       const fetchedTrending: TrendingCharacter[] = [
-         { id: 'char1', name: 'Coach Mike', description: 'Fitness & Motivation', avatar: require('../assets/char1.png') },
-         { id: 'char2', name: 'Dr. Lisa', description: 'Health & Wellness', avatar: require('../assets/char2.png') },
-         { id: 'char3', name: 'Chef Antonio', description: 'Cooking & Recipes', avatar: require('../assets/char3.png') },
-       ];
-       setTrendingCharacters(fetchedTrending);
-     };
-     loadTrending();
-   }, []);
-  // --- End Placeholder ---
-
+  // Removed Trending Characters placeholder useEffect
 
   // Calculate dynamic sizes based on screen width
-  const trendingItemWidth = Math.min(140, width * 0.38);
+  // Removed trendingItemWidth calculation
   const avatarSize = Math.min(70, width * 0.18);
 
   const handleChatPress = (chat: ChatSession) => {
@@ -231,15 +214,53 @@ export default function ChatListScreen({ navigation }: { navigation: ChatListScr
     }
   };
 
-  const handleTrendingPress = (character: TrendingCharacter) => {
-     const parentNav = getParentNavigator(navigation);
-     if (parentNav) {
-       parentNav.navigate('Chat', { character }); // Pass the whole character object
-     } else {
-       console.warn("Could not navigate to Chat: Parent navigator not found.");
-     }
-  };
+  // Removed handleTrendingPress function
 
+  // Animated Chat Item Component
+  const AnimatedChatItem = ({ item, index }: { item: ChatSession; index: number }) => {
+    const fadeAnim = React.useRef(new Animated.Value(0)).current; // Initial value for opacity: 0
+
+    React.useEffect(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300, // Fade in duration
+        delay: index * 80, // Stagger animation slightly
+        useNativeDriver: true, // Use native driver for performance
+      }).start();
+    }, [fadeAnim, index]);
+
+    return (
+      <Animated.View style={{ opacity: fadeAnim }}>
+        <TouchableOpacity
+          key={item.id} // Use unique key here
+          style={[
+            styles.chatItem, // Use updated chatItem style
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+              marginBottom: width * 0.03,
+            },
+          ]}
+          onPress={() => handleChatPress(item)}
+        >
+          <Image
+            source={typeof item.avatar === 'number' ? item.avatar : { uri: item.avatar as string }}
+            style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]} // Use avatar style
+          />
+          <View style={styles.chatInfo}>
+            <Text style={[styles.chatName, { color: theme.colors.text }]}>{item.name}</Text>
+            <Text
+              style={[styles.chatMessage, { color: theme.dark ? '#AAAAAA' : '#666666' }]}
+              numberOfLines={1}
+            >
+              {item.lastMessage}
+            </Text>
+          </View>
+          <Text style={[styles.chatTime, { color: theme.dark ? '#888888' : '#999999' }]}>{item.time}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -259,56 +280,7 @@ export default function ChatListScreen({ navigation }: { navigation: ChatListScr
         showsVerticalScrollIndicator={false}
       >
         <View style={{ padding: width * 0.04 }}>
-          {/* Trending Characters (Optional - Keep or remove based on design) */}
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Discover Characters</Text>
-          <ScrollView
-            horizontal={true}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.trendingScrollContainer, { paddingHorizontal: width * 0.02 }]}
-            decelerationRate="fast"
-            snapToInterval={trendingItemWidth + width * 0.04}
-            snapToAlignment="start"
-          >
-            {trendingCharacters.map((character) => (
-              <TouchableOpacity
-                key={character.id}
-                style={[
-                  styles.trendingItemHorizontal,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                    width: trendingItemWidth,
-                    marginRight: width * 0.04
-                  }
-                ]}
-                onPress={() => handleTrendingPress(character)}
-              >
-                <Image
-                  source={character.avatar}
-                  style={[
-                    styles.trendingAvatar,
-                    {
-                      width: avatarSize,
-                      height: avatarSize,
-                      borderRadius: avatarSize / 2
-                    }
-                  ]}
-                />
-                <Text
-                  style={[styles.trendingName, { color: theme.colors.text }]}
-                  numberOfLines={1}
-                >
-                  {character.name}
-                </Text>
-                <Text
-                  style={[styles.trendingDesc, { color: theme.dark ? '#AAAAAA' : '#666666' }]} // Use theme.dark
-                  numberOfLines={2}
-                >
-                  {character.description}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* Removed Discover Characters Section */}
 
           {/* Recent Chats List */}
           <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 24 }]}>Your Chats</Text>
@@ -321,32 +293,10 @@ export default function ChatListScreen({ navigation }: { navigation: ChatListScr
                </Text>
              </View>
            ) : (
-             recentChats.map((chat) => (
-                <TouchableOpacity
-                  key={chat.id} // Use conversation ID or a unique key
-                  style={[
-                    styles.chatItem,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                      marginBottom: width * 0.03
-                    }
-                  ]}
-                  onPress={() => handleChatPress(chat)}
-                >
-                  <Image source={chat.avatar} style={styles.avatar} />
-                  <View style={styles.chatInfo}>
-                    <Text style={[styles.chatName, { color: theme.colors.text }]}>{chat.name}</Text>
-                    <Text
-                      style={[styles.chatMessage, { color: theme.dark ? '#AAAAAA' : '#666666' }]} // Use theme.dark
-                      numberOfLines={1}
-                    >
-                      {chat.lastMessage}
-                    </Text>
-                  </View>
-                  <Text style={[styles.chatTime, { color: theme.dark ? '#888888' : '#999999' }]}>{chat.time}</Text> {/* Use theme.dark */}
-                </TouchableOpacity>
-              ))
+             // Use AnimatedChatItem to render the list with animations
+             recentChats.map((chat, index) => (
+               <AnimatedChatItem key={chat.id} item={chat} index={index} />
+             ))
            )}
         </View>
       </ScrollView>
@@ -368,43 +318,25 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
+    // Removed marginTop: 24 from here, handled in JSX
   },
-  trendingScrollContainer: {
-    paddingVertical: 10,
-  },
-  trendingItemHorizontal: {
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  trendingAvatar: {
-    marginBottom: 10,
-  },
-  trendingName: {
-    fontWeight: '600',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  trendingDesc: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  avatar: {
-    width: 50,
+  // Removed trending styles: trendingScrollContainer, trendingItemHorizontal, trendingAvatar, trendingName, trendingDesc
+chatItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderRadius: 12, // Use 12 for consistency
+  padding: 12,      // Keep padding 12
+  borderWidth: 1,   // Keep border width 1
+  // Add shadow for card effect
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 4,
+  elevation: 3,
+  // Removed duplicate padding, borderRadius, borderWidth
+},
+avatar: {
+  width: 50,
     height: 50,
     borderRadius: 25,
     marginRight: 12,
