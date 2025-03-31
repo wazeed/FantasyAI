@@ -1,83 +1,9 @@
 import React, { useState, useContext, useEffect } from 'react';
+// Use RootStackParamList for navigation and ProfileTabScreenProps for component props
 import { ProfileTabScreenProps } from '../types/screens';
-
-interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-}
-
-interface ProfileData {
-  displayName: string;
-  bio: string;
-  location: string;
-  email: string;
-  phone: string;
-  interests: string[];
-  achievements: Achievement[];
-}
-
-interface SettingItem {
-  title: string;
-  icon: string;
-  screen?: string;
-  toggle?: boolean;
-  action?: string;
-}
-
-interface SettingsCategory {
-  title: string;
-  items: SettingItem[];
-}
-
-const SETTINGS_CATEGORIES: SettingsCategory[] = [
-  {
-    title: 'Help & Support',
-    items: [
-      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
-      { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
-      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
-      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
-      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' }
-    ]
-  },
-  {
-    title: 'Preferences',
-    items: [
-      { title: 'Dark Mode', icon: 'moon-outline', toggle: true, action: 'toggleTheme' }
-    ]
-  }
-];
-
-const PROFILE_DATA: ProfileData = {
-  displayName: 'John Smith',
-  bio: 'Fantasy AI enthusiast and avid storyteller. I love creating unique character interactions and exploring different narratives.',
-  location: 'San Francisco, CA',
-  email: 'john.smith@example.com',
-  phone: '+1 (555) 123-4567',
-  interests: ['AI Characters', 'Storytelling', 'Science Fiction', 'Fantasy Worlds', 'Interactive Fiction'],
-  achievements: [
-    {
-      id: '1',
-      title: 'Story Master',
-      description: 'Created 50+ unique conversations',
-      date: '2023-12-01'
-    },
-    {
-      id: '2',
-      title: 'Conversation Explorer',
-      description: 'Talked with 20 different characters',
-      date: '2023-11-15'
-    },
-    {
-      id: '3',
-      title: 'Premium Member',
-      description: 'Subscribed to Fantasy AI Pro',
-      date: '2023-10-30'
-    }
-  ]
-};
+import { RootStackParamList } from '../types/navigation';
+// Import the Profile type from database types
+import { Profile } from '../types/database';
 import { supabase } from '../utils/supabase';
 import {
   View,
@@ -98,6 +24,42 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
+// Corrected SettingItem to use RootStackParamList keys for screen
+interface SettingItem {
+  title: string;
+  icon: string;
+  screen?: keyof RootStackParamList; // Use keys from RootStackParamList
+  toggle?: boolean;
+  action?: string;
+}
+
+interface SettingsCategory {
+  title: string;
+  items: SettingItem[]; // Use the updated SettingItem interface
+}
+
+// Ensure screen names match keys in RootStackParamList and items match SettingItem
+const SETTINGS_CATEGORIES: SettingsCategory[] = [
+  {
+    title: 'Help & Support',
+    // Ensure items conform to SettingItem interface
+    items: [
+      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
+      { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
+      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
+      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
+      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' }
+    ]
+  },
+  {
+    title: 'Preferences',
+    // Ensure items conform to SettingItem interface
+    items: [
+      { title: 'Dark Mode', icon: 'moon-outline', toggle: true, action: 'toggleTheme' }
+    ]
+  }
+];
+
 const { width } = Dimensions.get('window');
 
 export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
@@ -109,43 +71,80 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
   const { isDarkMode, toggleTheme } = themeContext;
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [profileData, setProfileData] = useState<ProfileData>(PROFILE_DATA);
+  // Use Partial<Profile> for state, initialize with null/defaults
+  const [profileData, setProfileData] = useState<Partial<Profile>>({
+    name: null,
+    bio: null,
+    email: user?.email || '', // Get email from auth user
+  });
   const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
-  const [newDisplayName, setNewDisplayName] = useState(profileData.displayName);
-  const [newBio, setNewBio] = useState(profileData.bio);
-  const { navigate } = useNavigation();
+  // Initialize edit states from profileData after loading
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [newBio, setNewBio] = useState('');
+  // Use useNavigation hook correctly for typed navigation
+  const nav = useNavigation<ProfileTabScreenProps['navigation']>(); // Get typed navigation prop
 
   useEffect(() => {
     const loadProfileData = async () => {
       setIsLoading(true);
       try {
         if (isGuest) {
-          // Load guest profile from AsyncStorage
-          const guestProfile = await AsyncStorage.getItem('guestProfile');
-          if (guestProfile) {
-            setProfileData(JSON.parse(guestProfile));
+          // Load guest profile from AsyncStorage (adjust structure if needed)
+          const guestProfileString = await AsyncStorage.getItem('guestProfile');
+          if (guestProfileString) {
+            const guestProfile = JSON.parse(guestProfileString);
+             setProfileData({
+               name: guestProfile.name || null, // Use 'name'
+               bio: guestProfile.bio || null,
+               email: 'guest@example.com' // Placeholder for guest
+             });
+             setNewDisplayName(guestProfile.name || '');
+             setNewBio(guestProfile.bio || '');
+          } else {
+             // Set default guest state
+             setProfileData({ name: 'Guest User', bio: '', email: 'guest@example.com' });
+             setNewDisplayName('Guest User');
+             setNewBio('');
           }
         } else if (user?.id) {
-          // Load authenticated user profile from Supabase
+          // Load authenticated user profile from Supabase 'profiles' table
           const { data, error } = await supabase
-            .from('users')
-            .select('*')
+            .from('profiles') // Correct table name
+            .select('name, bio, email') // Select specific columns
             .eq('id', user.id)
             .single();
 
-          if (error) throw error;
+          if (error && error.code !== 'PGRST116') { // Ignore 'No rows found' error, handle as new profile
+             console.error('Supabase fetch error:', error);
+             throw error;
+           }
 
           if (data) {
             setProfileData({
-              displayName: data.display_name || PROFILE_DATA.displayName,
-              bio: data.bio || PROFILE_DATA.bio,
-              location: data.location || PROFILE_DATA.location,
-              email: user.email || PROFILE_DATA.email,
-              phone: data.phone || PROFILE_DATA.phone,
-              interests: data.interests || PROFILE_DATA.interests,
-              achievements: PROFILE_DATA.achievements
+              id: user.id, // Store id if needed
+              name: data.name || null,
+              bio: data.bio || null,
+              email: data.email || user.email || '', // Use profile email or auth email
             });
+            // Initialize edit states
+            setNewDisplayName(data.name || '');
+            setNewBio(data.bio || '');
+          } else {
+             // Handle case where profile row doesn't exist yet but user is authenticated
+             // Attempt to insert a new profile row if it doesn't exist
+             const { error: insertError } = await supabase
+               .from('profiles')
+               .insert({ id: user.id, email: user.email || '', name: null, bio: null });
+
+             if (insertError) {
+               console.error('Error inserting initial profile:', insertError);
+               // Handle error appropriately, maybe show a message to the user
+             } else {
+                setProfileData({ id: user.id, name: null, bio: null, email: user.email || '' });
+                setNewDisplayName('');
+                setNewBio('');
+             }
           }
         }
       } catch (error) {
@@ -157,7 +156,7 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
     };
 
     loadProfileData();
-  }, [user?.id, isGuest]);
+  }, [user?.id, isGuest, user?.email]); // Added user.email dependency
 
   // Dynamic colors based on theme
   const colors = {
@@ -171,14 +170,15 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
     accent: '#4F46E5'
   };
 
-  // Removed handleEditProfile function
-
-  const navigateToScreen = (screenName: string) => { // Added type annotation
-    navigation.navigate(screenName);
+  // Update function signature to use keyof RootStackParamList
+  const navigateToScreen = (screenName: keyof RootStackParamList) => {
+    // Use the correctly typed navigation prop
+    nav.navigate(screenName as any); // Use 'as any' or refine types if RootStack is not directly navigable from ProfileTab
   };
 
   const handleEditDisplayNameClick = () => {
-    setNewDisplayName(profileData.displayName);
+    // Ensure profileData.name is not null before setting
+    setNewDisplayName(profileData.name || '');
     setIsEditingDisplayName(true);
   };
 
@@ -191,19 +191,20 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
     try {
       if (isGuestUser()) {
         // Save to AsyncStorage for guest users
+        const currentGuestProfile = profileData; // Get current state
         await AsyncStorage.setItem('guestProfile', JSON.stringify({
-          ...profileData,
-          displayName: newDisplayName
+          ...currentGuestProfile, // Spread existing guest data
+          name: newDisplayName // Update name
         }));
       } else {
-        // Save to Supabase for authenticated users
+        // Save to Supabase 'profiles' table for authenticated users
         if (!user?.id) {
           throw new Error('User not authenticated');
         }
         const { error } = await supabase
-          .from('users')
+          .from('profiles') // Correct table name
           .update({
-            display_name: newDisplayName,
+            name: newDisplayName, // Correct column name
             updated_at: new Date().toISOString()
           })
           .eq('id', user.id);
@@ -211,9 +212,10 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
         if (error) throw error;
       }
 
+      // Update local state
       setProfileData(prevData => ({
         ...prevData,
-        displayName: newDisplayName
+        name: newDisplayName // Update name field
       }));
       setIsEditingDisplayName(false);
       Alert.alert('Success', 'Display name updated successfully');
@@ -227,10 +229,13 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
 
   const handleCancelDisplayNameEdit = () => {
     setIsEditingDisplayName(false);
-    setNewDisplayName(profileData.displayName);
+    // Reset from potentially loaded profile data
+    setNewDisplayName(profileData.name || '');
   };
 
   const handleEditBioClick = () => {
+    // Ensure profileData.bio is not null before setting
+    setNewBio(profileData.bio || '');
     setIsEditingBio(true);
   };
 
@@ -239,16 +244,17 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
     try {
       if (isGuestUser()) {
         // Save to AsyncStorage for guest users
+        const currentGuestProfile = profileData; // Get current state
         await AsyncStorage.setItem('guestProfile', JSON.stringify({
-          ...profileData,
-          bio: newBio
+          ...currentGuestProfile, // Spread existing guest data
+          bio: newBio // Update bio
         }));
       } else if (user?.id) {
-        // Save to Supabase for authenticated users
+        // Save to Supabase 'profiles' table for authenticated users
         const { error } = await supabase
-          .from('users')
+          .from('profiles') // Correct table name
           .update({
-            bio: newBio,
+            bio: newBio, // Correct column name
             updated_at: new Date().toISOString()
           })
           .eq('id', user.id);
@@ -256,9 +262,10 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
         if (error) throw error;
       }
 
+      // Update local state
       setProfileData(prevData => ({
         ...prevData,
-        bio: newBio
+        bio: newBio // Update bio field
       }));
       setIsEditingBio(false);
       Alert.alert('Success', 'Bio updated successfully');
@@ -272,10 +279,12 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
 
   const handleCancelBioEdit = () => {
     setIsEditingBio(false);
-    setNewBio(profileData.bio);
+    // Reset from potentially loaded profile data
+    setNewBio(profileData.bio || '');
   };
 
-  const handleActionPress = (action: string | undefined, screen: string | undefined) => { // Added types
+  // Corrected handleActionPress signature and usage
+  const handleActionPress = (action?: string, screen?: keyof RootStackParamList) => {
     if (action === 'toggleTheme') {
       toggleTheme();
     } else if (screen) {
@@ -283,38 +292,20 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
     }
   };
 
-  const renderInterestItem = (interest: string, index: number) => (
-    <View key={index} style={[styles.interestItem, { backgroundColor: colors.lightBackground }]}>
-      <Text style={[styles.interestText, { color: colors.text }]}>{interest}</Text>
-    </View>
-  );
-
-  const renderAchievementItem = (achievement: Achievement) => (
-    <View key={achievement.id} style={[styles.achievementItem, { backgroundColor: isDarkMode ? '#252525' : '#F9F9F9' }]}>
-      <View style={styles.achievementIcon}>
-        <Text style={styles.achievementIconText}>🏆</Text>
-      </View>
-      <View style={styles.achievementContent}>
-        <Text style={[styles.achievementTitle, { color: colors.text }]}>{achievement.title}</Text>
-        <Text style={[styles.achievementDescription, { color: colors.subText }]}>{achievement.description}</Text>
-        <Text style={[styles.achievementDate, { color: colors.subText }]}>
-          {new Date(achievement.date).toLocaleDateString()}
-        </Text>
-      </View>
-    </View>
-  );
+  // Removed renderInterestItem and renderAchievementItem as they are not used
 
   const renderSettingItem = (item: SettingItem) => {
     const isToggle = item.toggle;
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         key={item.title}
-        style={[styles.settingItem, { borderBottomColor: colors.border }]} 
+        style={[styles.settingItem, { borderBottomColor: colors.border }]}
+        // Pass item.screen directly which is now keyof RootStackParamList | undefined
         onPress={() => handleActionPress(item.action, item.screen)}
       >
         <View style={styles.settingContent}>
-          <Ionicons name={item.icon} size={22} color={colors.text} style={styles.settingIcon} />
+          <Ionicons name={item.icon as any} size={22} color={colors.text} style={styles.settingIcon} />
           <Text style={[styles.settingText, { color: colors.text }]}>{item.title}</Text>
         </View>
         {isToggle ? (
@@ -332,34 +323,43 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
         <Text style={[styles.settingsCategoryTitle, { color: colors.text }]}>{category.title}</Text>
       </View>
       <View style={[styles.settingsList, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        {category.items.map((item: SettingItem) => renderSettingItem(item))}
+        {/* Map should infer item type correctly now */}
+        {category.items.map((item) => renderSettingItem(item))}
       </View>
     </View>
   );
 
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
         {/* Profile Header */}
         <View style={[styles.profileHeader, { backgroundColor: colors.card }]}>
           <View style={styles.profileImageContainer}>
-            <Image 
-              source={require('../assets/profile-placeholder.png')} 
+            <Image
+              source={require('../assets/profile-placeholder.png')}
               style={styles.profileImage}
             />
             <TouchableOpacity style={styles.editImageButton}>
               <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          
+
           {isEditingDisplayName ? (
             <View style={styles.editUsernameContainer}>
               <TextInput
                 style={[styles.usernameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
-                value={newDisplayName}
+                value={newDisplayName} // Use state variable
                 onChangeText={setNewDisplayName}
                 autoCapitalize="words"
                 placeholder="Enter display name"
@@ -397,20 +397,21 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
           ) : (
             <View style={[styles.usernameDisplayContainer, {flexDirection: 'row', alignItems: 'center'}]}>
               <Text style={[styles.displayName, { color: colors.text }]}>
-                {profileData.displayName}
+                {/* Display name from state */}
+                {profileData.name || 'Set Display Name'}
               </Text>
               <TouchableOpacity onPress={handleEditDisplayNameClick} style={[styles.editIcon, {marginLeft: 8}]}>
-                <Ionicons name="create-outline" size={18} color={colors.subText} />
+                <Ionicons name="pencil-outline" size={18} color={colors.subText} />
               </TouchableOpacity>
             </View>
           )}
-          
-          
+
+
           {isEditingBio ? (
             <View style={styles.editBioContainer}>
               <TextInput
                 style={[styles.bioInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
-                value={newBio}
+                value={newBio} // Use state variable
                 onChangeText={setNewBio}
                 multiline
                 numberOfLines={4}
@@ -440,25 +441,30 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
           ) : (
             <View style={styles.bioDisplayContainer}>
               <Text style={[styles.bio, { color: colors.text }]}>
-                {profileData.bio || 'Tell us about yourself'}
+                {/* Display bio from state */}
+                {profileData.bio || 'No bio set.'}
               </Text>
               <TouchableOpacity onPress={handleEditBioClick} style={styles.editIcon}>
-                <Ionicons name="create-outline" size={18} color={colors.subText} />
+                <Ionicons name="pencil-outline" size={18} color={colors.subText} />
               </TouchableOpacity>
             </View>
           )}
-          
-          {/* Removed Edit Profile Button */}
-          
+
+          {/* Display Email (Non-editable) */}
+          <View style={styles.emailContainer}>
+             <Ionicons name="mail-outline" size={18} color={colors.subText} style={styles.emailIcon} />
+             <Text style={[styles.emailText, { color: colors.subText }]}>
+               {profileData.email}
+             </Text>
+          </View>
+
         </View>
-        
-        {/* Removed Achievements section */}
-        
+
         {/* Settings */}
-        <View style={[styles.settingsContainer, { backgroundColor: colors.card }]}>
+        <View style={[styles.settingsContainer /* Removed background color here, applied in renderSettingsCategory */]}>
           {SETTINGS_CATEGORIES.map((category, index) => renderSettingsCategory(category, index))}
         </View>
-        
+
         {/* Sign Out Button */}
         <TouchableOpacity
           style={[styles.signOutButton, { backgroundColor: isDarkMode ? '#2A2A2A' : '#F5F5F5' }]}
@@ -467,7 +473,7 @@ export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
           <Ionicons name="log-out-outline" size={22} color={isDarkMode ? '#FF5252' : '#E53935'} style={styles.signOutIcon} />
           <Text style={[styles.signOutText, { color: isDarkMode ? '#FF5252' : '#E53935' }]}>Sign Out</Text>
         </TouchableOpacity>
-        
+
         <Text style={[styles.versionText, { color: colors.subText }]}>
           Version 1.0.0
         </Text>
@@ -503,154 +509,140 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    borderWidth: 4,
-    borderColor: '#4F46E5',
   },
   editImageButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#4F46E5',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#4F46E5', // Accent color
+    padding: 6,
+    borderRadius: 15,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: '#FFFFFF', // White border
   },
-  displayName: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  username: {
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  bio: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-    paddingHorizontal: 16,
-  },
-  editProfileButton: {
+  editUsernameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  editButtonIcon: {
-    marginRight: 6,
-  },
-  editButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  infoCard: {
-    padding: 16,
-    borderRadius: 24,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  infoText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  interestItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  interestText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  achievementsContainer: {
+    width: '100%',
     marginTop: 8,
   },
-  achievementItem: {
+  usernameInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 18,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  editUsernameButton: {
+    padding: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  usernameDisplayContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
+    marginTop: 8,
   },
-  achievementIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFD700',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  achievementIconText: {
+  displayName: {
     fontSize: 22,
+    fontWeight: '700',
   },
-  achievementContent: {
-    flex: 1,
+  editBioContainer: {
+    width: '100%',
+    marginTop: 8,
   },
-  achievementTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  achievementDescription: {
+  bioInput: {
+    width: '100%',
+    minHeight: 80, // Adjust height as needed
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10, // Add padding top for multiline
     fontSize: 14,
-    marginBottom: 4,
-  },
-  achievementDate: {
-    fontSize: 12,
-  },
-  settingsContainer: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  settingsCategoryContainer: {
+    textAlignVertical: 'top', // Align text to top for multiline
     marginBottom: 8,
   },
+  bioButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end', // Align buttons to the right
+    alignItems: 'center',
+    marginTop: 8, // Spacing for bio edit buttons
+  },
+  editBioButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40, // Ensure buttons have some width
+  },
+  bioDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start', // Align edit icon to top
+    marginTop: 8,
+    width: '100%',
+  },
+  bio: {
+    fontSize: 14,
+    lineHeight: 20,
+    flex: 1, // Allow text to wrap
+    marginRight: 8, // Space before edit icon
+    textAlign: 'center', // Center bio text
+  },
+  editIcon: {
+    padding: 4, // Make icon easier to tap
+  },
+  emailContainer: { // Added style
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  emailIcon: { // Added style
+    marginRight: 6,
+  },
+  emailText: { // Added style
+    fontSize: 14,
+  },
+  settingsContainer: {
+    marginTop: 16,
+    // Removed background color, applied in renderSettingsCategory
+    // Removed shadow styles, applied to individual category containers if needed
+  },
+  settingsCategoryContainer: {
+    marginBottom: 0, // Remove bottom margin if categories are contiguous
+    borderRadius: 16, // Apply border radius here
+    overflow: 'hidden', // Clip children
+    // Add shadow here if desired per category
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   settingsCategoryHeader: {
-    paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    // Removed background color, inherited from parent or set individually
+    borderTopLeftRadius: 16, // Match parent container
+    borderTopRightRadius: 16,
+    borderBottomWidth: 1, // Separator line
+    // borderBottomColor set by theme
   },
   settingsCategoryTitle: {
     fontSize: 16,
     fontWeight: '600',
   },
   settingsList: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
+    // Removed background color, inherited
+    borderBottomLeftRadius: 16, // Match parent container
+    borderBottomRightRadius: 16,
+    // Removed border color, set by theme
   },
   settingItem: {
     flexDirection: 'row',
@@ -658,26 +650,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    // borderBottomColor set by theme
   },
   settingContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   settingIcon: {
-    marginRight: 12,
+    marginRight: 16,
+    width: 24, // Ensure consistent icon alignment
+    textAlign: 'center',
   },
   settingText: {
-    fontSize: 15,
+    fontSize: 16,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 24,
-    marginTop: 8,
-    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 24, // Space above sign out
   },
   signOutIcon: {
     marginRight: 8,
@@ -686,73 +680,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Username editing styles
-  usernameSection: {
-    marginBottom: 16,
-    width: '100%',
-  },
-  editUsernameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  usernameInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginRight: 8,
-  },
-  editUsernameButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  usernameDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editIcon: {
-    marginLeft: 8,
-  },
-  // Bio editing styles
-  editBioContainer: {
-    marginTop: 12,
-    width: '100%',
-  },
-  bioInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  bioButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 8,
-  },
-  editBioButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bioDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 12,
-  },
   versionText: {
-    fontSize: 14,
+    marginTop: 16,
     textAlign: 'center',
+    fontSize: 12,
   },
-}); 
+  // Removed unused styles: interestItem, interestText, achievementItem, achievementIcon, etc.
+});

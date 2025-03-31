@@ -1,6 +1,7 @@
 import { DatabaseService } from './databaseService';
 import { CacheService } from './cacheService';
-import { Conversation, Message as DbMessage, Json } from '../types/database';
+// Updated import: Use Chat instead of Conversation
+import { Chat, Message as DbMessage, Json } from '../types/database';
 
 export type Message = DbMessage;
 const cache = CacheService.getInstance();
@@ -22,7 +23,8 @@ type CreateMessage = Omit<Message, 'id' | 'created_at'>;
 /**
  * Get all conversations for a user
  */
-export const getUserConversations = async (userId: string): Promise<Conversation[]> => {
+// Replace Conversation[] with Chat[]
+export const getUserConversations = async (userId: string): Promise<Chat[]> => {
   const cacheKey = `user:${userId}:conversations`;
   
   const result = await cache.getOrCompute(
@@ -43,7 +45,8 @@ export const getUserConversations = async (userId: string): Promise<Conversation
 /**
  * Get recent conversations for a user, ordered by last interaction
  */
-export const getRecentConversations = async (userId: string, limit: number = 15): Promise<Conversation[]> => {
+// Replace Conversation[] with Chat[]
+export const getRecentConversations = async (userId: string, limit: number = 15): Promise<Chat[]> => {
   // No caching for recent conversations as they change frequently,
   // or use a very short TTL if needed.
   try {
@@ -65,14 +68,16 @@ export const getRecentConversations = async (userId: string, limit: number = 15)
 /**
  * Get conversation details
  */
-export const getConversation = async (conversationId: string): Promise<Conversation | null> => {
+// Replace Conversation with Chat
+export const getConversation = async (conversationId: string): Promise<Chat | null> => {
   const cacheKey = `conversation:${conversationId}`;
-  
+
+  // Add type assertion for cache result and ensure the table name is correct
   return cache.getOrCompute(
     cacheKey,
-    async () => DatabaseService.getById('conversations', conversationId),
+    async () => DatabaseService.getById('chat_history', conversationId),
     CONVERSATION_CACHE_TTL
-  );
+  ) as Promise<Chat | null>;
 };
 
 /**
@@ -83,7 +88,8 @@ export const createConversation = async (
   characterId: string,
   characterData: Record<string, any>,
   initialTitle?: string
-): Promise<Conversation | null> => {
+// Replace Conversation with Chat
+): Promise<Chat | null> => {
   try {
     const title = initialTitle || `Chat with ${characterData.name || 'Character'}`;
     
@@ -96,9 +102,10 @@ export const createConversation = async (
       last_interaction_at: null, // Initialize as null
       last_message_preview: null // Initialize as null
     };
-    
-    const conversation = await DatabaseService.insert('conversations', newConversation);
-    
+
+    // Add type assertion for insert result and ensure table name is correct
+    const conversation = await DatabaseService.insert('chat_history', newConversation) as Chat | null;
+
     if (conversation) {
       // Update cache
       cache.delete(`user:${userId}:conversations`);
@@ -114,20 +121,25 @@ export const createConversation = async (
 /**
  * Update conversation details
  */
+// Replace Conversation with Chat in updates type
+// Add userId parameter for cache invalidation
 export const updateConversation = async (
   conversationId: string,
-  updates: Partial<Conversation>
+  userId: string, // Added userId
+  updates: Partial<Chat>
 ): Promise<boolean> => {
   try {
-    const conversation = await DatabaseService.update('conversations', conversationId, updates);
-    
-    if (conversation) {
+    // Perform the update first
+    const updated = await DatabaseService.update('chat_history', conversationId, updates); // Use 'chat_history' table
+
+    if (updated) { // Check if update was successful (DatabaseService.update should return boolean or updated row)
       // Update cache
       cache.delete(`conversation:${conversationId}`);
-      cache.delete(`user:${conversation.user_id}:conversations`);
+      // Use the passed userId for cache invalidation
+      cache.delete(`user:${userId}:conversations`);
       return true;
     }
-    
+
     return false;
   } catch (error) {
     console.error('Error updating conversation:', error);
@@ -164,9 +176,10 @@ export const deleteConversation = async (conversationId: string): Promise<boolea
       // Update caches
       cache.delete(`conversation:${conversationId}`);
       cache.delete(`conversation:${conversationId}:messages`);
+      // Use conversation.user_id obtained before deletion
       cache.delete(`user:${conversation.user_id}:conversations`);
     }
-    
+
     return success || false;
   } catch (error) {
     console.error('Error deleting conversation:', error);
@@ -205,26 +218,40 @@ export const sendMessage = async (
   metadata?: Record<string, any>
 ): Promise<Message | null> => {
   try {
+    // Corrected property name from conversation_id to chat_id
     const newMessage: CreateMessage = {
-      conversation_id: conversationId,
-      sender_type: senderType,
-      // Map 'character' sender type to 'assistant' role for AI model compatibility
-      role: senderType === 'character' ? 'assistant' : 'user',
+      chat_id: conversationId,
+      sender: senderType === 'character' ? 'assistant' : 'user', // Use 'sender' based on ChatMessage interface
       content,
-      metadata: metadata as Json
+      // Assuming metadata is not part of the core ChatMessage type defined earlier
+      // metadata: metadata as Json // Remove or adjust based on actual 'messages' table schema if needed
     };
-    
-    const message = await DatabaseService.insert('messages', newMessage);
-    
-    if (message) {
-      // Update conversation's updated_at timestamp
-      await updateConversation(conversationId, {});
-      
-      // Update cache
-      cache.delete(`conversation:${conversationId}:messages`);
+
+    const insertedMessage = await DatabaseService.insert('messages', newMessage);
+
+    if (insertedMessage) {
+      // Fetch the conversation to get the user_id before updating
+      const conversation = await getConversation(conversationId);
+      const chat = await getConversation(conversationId);
+      if (chat) {
+        // Update the chat's updated_at timestamp.
+        // The 'updates' object in updateConversation needs to match Partial<Chat>.
+        // Since 'updated_at' is likely managed by the DB, we might not need explicit update here,
+        // but if we do, it should be { updated_at: new Date().toISOString() }
+        // For now, we'll rely on the DB trigger or handle it if necessary elsewhere.
+        // We still need the userId for cache invalidation in updateConversation.
+        await updateConversation(conversationId, chat.user_id, { /* Pass valid updates if any */ });
+
+        // Update message cache
+        cache.delete(`conversation:${conversationId}:messages`);
+        // User conversation cache is handled within updateConversation now
+      } else {
+         console.warn(`Could not find conversation ${conversationId} to update after sending message.`);
+      }
     }
-    
-    return message;
+
+    // Assert the type of the returned message
+    return insertedMessage as Message | null;
   } catch (error) {
     console.error('Error sending message:', error);
     return null;
@@ -234,12 +261,14 @@ export const sendMessage = async (
 /**
  * Get multiple conversations by IDs
  */
-export const getConversationsByIds = async (ids: string[]): Promise<Conversation[]> => {
+// Replace Conversation[] with Chat[] and explicitly type 'conv'
+export const getConversationsByIds = async (ids: string[]): Promise<Chat[]> => {
   const results = await Promise.all(
     ids.map(id => getConversation(id))
   );
-  
-  return results.filter((conv): conv is Conversation => conv !== null);
+
+  // Explicitly type 'conv' and use 'Chat' type guard
+  return results.filter((conv: Chat | null): conv is Chat => conv !== null);
 };
 
 /**
@@ -247,7 +276,17 @@ export const getConversationsByIds = async (ids: string[]): Promise<Conversation
  */
 export const toggleConversationFavorite = async (
   conversationId: string,
+  userId: string, // Keep userId as it's needed for updateConversation
   isFavorite: boolean
 ): Promise<boolean> => {
-  return await updateConversation(conversationId, { is_favorite: isFavorite });
+  // Cannot update is_favorite as it doesn't exist on chat_history table.
+  // This function's purpose needs re-evaluation based on schema.
+  // If 'is_favorite' were moved to 'profiles' or a linking table, logic would change.
+  // For now, log a warning and return false.
+  console.warn(`Attempted to toggle favorite on chat ${conversationId} for user ${userId}, but 'is_favorite' column does not exist on chat_history.`);
+  // Returning false as the intended operation cannot be completed.
+  // We avoid calling updateConversation unnecessarily.
+  return false;
+  // Original logic that would fail:
+  // return await updateConversation(conversationId, userId, { is_favorite: isFavorite });
 };
