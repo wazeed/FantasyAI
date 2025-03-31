@@ -1,154 +1,150 @@
 import { supabase } from '../utils/supabase';
-import { DatabaseService } from './databaseService';
-import { CacheService } from './cacheService';
 import { User } from '@supabase/supabase-js';
-import { UserProfile, DatabaseError, QueryOptions, Json } from '../types/database';
+// Import the specific Profile type generated from the schema
+import { Database } from '../types/database'; // Assuming this is the main export
 
-const cache = CacheService.getInstance();
-const USER_CACHE_TTL = 5; // Cache user profiles for 5 minutes
+// Define Profile based on the generated types
+type Profile = Database['public']['Tables']['profiles']['Row'];
+// Define Profile update type based on generated types
+type ProfileUpdate = Database['public']['Tables']['profiles']['Update'];
 
-/**
- * Get the user profile with caching
- */
-export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
-  const cacheKey = `user:${userId}`;
-  
-  return cache.getOrCompute(
-    cacheKey,
-    async () => DatabaseService.getById('users', userId),
-    USER_CACHE_TTL
-  );
-};
+// Removed CacheService and DatabaseService imports as we'll use supabase client directly
 
 /**
- * Create a new user profile after signup
+ * Get the user profile directly from Supabase.
  */
-export const createUserProfile = async (user: User): Promise<UserProfile | null> => {
+export const getUserProfile = async (userId: string): Promise<Profile | null> => {
   try {
-    // Check if profile already exists
-    const existingUser = await DatabaseService.getById('users', user.id);
-    if (existingUser) {
-      return existingUser;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*') // Select all columns for now, adjust if needed
+      .eq('id', userId)
+      .single(); // Use single() as 'id' is the primary key
+
+    if (error && error.code !== 'PGRST116') { // PGRST116: No rows found, which is okay if profile not created yet
+      console.error('Error fetching user profile:', error);
+      throw error;
     }
 
-    // Ensure we have an email
-    if (!user.email) {
-      throw new Error('Email is required');
-    }
-
-    // Create new profile
-    const newUser = {
-      id: user.id,
-      email: user.email,
-      username: user.email.split('@')[0],
-      display_name: user.user_metadata?.full_name || user.email.split('@')[0],
-      avatar_url: user.user_metadata?.avatar_url || '',
-    };
-    
-    const profile = await DatabaseService.insert('users', newUser);
-    
-    if (profile) {
-      // Update cache with new profile
-      cache.set(`user:${user.id}`, profile, USER_CACHE_TTL);
-    }
-    
-    return profile;
+    return data;
   } catch (error) {
-    console.error('Error creating user profile:', error);
+    console.error('Error in getUserProfile:', error);
     return null;
   }
 };
 
 /**
- * Update a user profile
+ * createUserProfile is no longer needed here as the handle_new_user trigger
+ * in schema.sql automatically creates a profile row upon user signup.
+ */
+// export const createUserProfile = async (user: User): Promise<Profile | null> => { ... };
+
+/**
+ * Update a user profile in the 'profiles' table.
  */
 export const updateUserProfile = async (
   userId: string,
-  updates: Partial<UserProfile>
-): Promise<UserProfile | null> => {
+  updates: ProfileUpdate // Use the generated Update type
+): Promise<Profile | null> => {
   try {
-    const profile = await DatabaseService.update('users', userId, updates);
-    
-    if (profile) {
-      // Update cache with new profile data
-      cache.set(`user:${userId}`, profile, USER_CACHE_TTL);
+    // Ensure updated_at is set automatically by the trigger, no need to set it here
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', userId)
+      .select() // Select the updated row
+      .single(); // Expecting a single row back
+
+    if (error) {
+      console.error('Error updating user profile:', error);
+      throw error;
     }
-    
-    return profile;
+
+    // No need to manually update cache for now
+    // if (data) {
+    //   cache.set(`user:${userId}`, data, USER_CACHE_TTL);
+    // }
+
+    return data;
   } catch (error) {
-    console.error('Error updating user profile:', error);
+    console.error('Error in updateUserProfile:', error);
     return null;
   }
 };
 
 /**
- * Update user preferences
+ * Update user preferences - Commented out for now, needs review based on schema
  */
+/*
 export const updateUserPreferences = async (
   userId: string,
   preferences: Record<string, any>
 ): Promise<boolean> => {
   try {
-    const userData = await DatabaseService.getById('users', userId);
-    if (!userData) return false;
+    // This needs adjustment if 'preferences' column doesn't exist or has a different structure
+    const { data: profile, error: updateError } = await supabase
+      .from('profiles')
+      .update({ preferences: preferences as Json }) // Cast might be needed depending on final type
+      .eq('id', userId)
+      .select('id') // Only select id to confirm update
+      .single();
 
-    const currentPreferences = (userData.preferences as Record<string, any>) || {};
-    const updatedPreferences = { ...currentPreferences, ...preferences };
-    
-    const profile = await DatabaseService.update('users', userId, {
-      preferences: updatedPreferences as Json
-    });
-    
-    if (profile) {
-      // Update cache with new profile data
-      cache.set(`user:${userId}`, profile, USER_CACHE_TTL);
-      return true;
-    }
-    
-    return false;
+    if (updateError) throw updateError;
+
+    return !!profile; // Return true if update was successful
+
   } catch (error) {
     console.error('Error updating user preferences:', error);
     return false;
   }
 };
+*/
 
 /**
- * Search users with pagination and filtering
+ * Search users - Commented out for now, needs review based on schema/requirements
  */
+/*
 export const searchUsers = async (options?: QueryOptions) => {
-  return DatabaseService.query('users', options);
+  // This needs adjustment to query 'profiles' table and handle options correctly
+  // return DatabaseService.query('profiles', options);
+  console.warn('searchUsers function needs implementation for profiles table');
+  return [];
 };
+*/
 
 /**
- * Delete user and all associated data
+ * Delete user and all associated data - Commented out, requires careful handling
  */
+/*
 export const deleteUser = async (userId: string): Promise<boolean> => {
   try {
-    // Use transaction to ensure all user data is deleted
-    const result = await DatabaseService.transaction(async () => {
-      // Delete user profile (this will cascade to other tables via RLS)
-      const success = await DatabaseService.delete('users', userId);
-      
-      if (success) {
-        // Clear user data from cache
-        cache.delete(`user:${userId}`);
-        
-        // Delete user auth data from Supabase
-        const { error } = await supabase.auth.admin.deleteUser(userId);
-        if (error) throw error;
-        
-        return true;
-      }
-      
-      return false;
-    });
-    
-    return result || false;
+    // Deleting from auth.users should cascade delete the profile due to FOREIGN KEY constraint
+    // However, deleting via admin API is safer and cleaner
+    const { error: adminError } = await supabase.auth.admin.deleteUser(userId);
+
+    if (adminError) {
+      console.error('Error deleting user from auth:', adminError);
+      // Attempt to delete from profiles table as fallback? Risky.
+      // const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
+      // if (profileError) {
+      //   console.error('Error deleting profile directly:', profileError);
+      //   throw adminError; // Re-throw original error
+      // }
+      throw adminError;
+    }
+
+    // Clear cache if used
+    // cache.delete(`user:${userId}`);
+
+    return true;
   } catch (error) {
     console.error('Error deleting user:', error);
     return false;
   }
 };
+*/
 
-// Initialize cleanup interval for expired cache items
-cache.startCleanupInterval(30); // Clean up every 30 minutes
+// Removed cache initialization and cleanup interval
+// const cache = CacheService.getInstance();
+// const USER_CACHE_TTL = 5;
+// cache.startCleanupInterval(30);

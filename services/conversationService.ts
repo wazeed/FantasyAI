@@ -1,292 +1,226 @@
-import { DatabaseService } from './databaseService';
-import { CacheService } from './cacheService';
-// Updated import: Use Chat instead of Conversation
-import { Chat, Message as DbMessage, Json } from '../types/database';
+import { supabase } from '../utils/supabase';
+import { Database } from '../types/database'; // Import the main generated type
+import { RealtimeChannel } from '@supabase/supabase-js';
 
-export type Message = DbMessage;
-const cache = CacheService.getInstance();
-const CONVERSATION_CACHE_TTL = 5; // Cache conversations for 5 minutes
-const MESSAGES_CACHE_TTL = 5; // Cache messages for 5 minutes
+// Define Message type based on the generated types and EXPORT it
+export type Message = Database['public']['Tables']['messages']['Row'];
+// Define type for inserting a new message
+type MessageInsert = Database['public']['Tables']['messages']['Insert'];
 
-// Explicitly define the type for creating conversations
-type CreateConversation = {
-  user_id: string;
-  character_id: string;
-  title: string;
-  is_favorite: boolean;
-  character_data?: Json | null;
-  last_message_preview?: string | null;
-  last_interaction_at: string | null; // Initialize as null
-};
-type CreateMessage = Omit<Message, 'id' | 'created_at'>;
+// Define a type for the recent chats list
+export interface RecentChatInfo {
+  character_id: number;
+  last_message_content: string | null;
+  last_message_time: string | null;
+  // Add other relevant fields if needed, e.g., character name/image from a join
+}
+
 
 /**
- * Get all conversations for a user
+ * Get all messages for a specific chat between a user and a character, ordered by creation time.
  */
-// Replace Conversation[] with Chat[]
-export const getUserConversations = async (userId: string): Promise<Chat[]> => {
-  const cacheKey = `user:${userId}:conversations`;
-  
-  const result = await cache.getOrCompute(
-    cacheKey,
-    async () => {
-      const result = await DatabaseService.query('conversations', {
-        filters: [{ column: 'user_id', operator: '=', value: userId }],
-        orderBy: { column: 'updated_at', direction: 'desc' }
-      });
-      return result.data;
-    },
-    CONVERSATION_CACHE_TTL
-  );
-  
-  return result || [];
-};
-
-/**
- * Get recent conversations for a user, ordered by last interaction
- */
-// Replace Conversation[] with Chat[]
-export const getRecentConversations = async (userId: string, limit: number = 15): Promise<Chat[]> => {
-  // No caching for recent conversations as they change frequently,
-  // or use a very short TTL if needed.
+export const getChatMessages = async (userId: string, characterId: number): Promise<Message[]> => {
   try {
-    const result = await DatabaseService.query('conversations', {
-      filters: [{ column: 'user_id', operator: '=', value: userId }],
-      orderBy: { column: 'last_interaction_at', direction: 'desc' },
-      limit: limit
-    });
-    // Ensure last_interaction_at is not null if the DB allows nulls and we want only interacted chats
-    // return (result.data || []).filter(c => c.last_interaction_at);
-    return result.data || [];
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('character_id', characterId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching chat messages:', error);
+      throw error;
+    }
+    return data || [];
   } catch (error) {
-    console.error('Error fetching recent conversations:', error);
+    console.error('Error in getChatMessages:', error);
+    return [];
+  }
+};
+
+/**
+ * Get recent chats for a user, showing the last message for each character.
+ * Note: This requires a more complex query or post-processing.
+ * A simpler version might just fetch distinct character_ids recently messaged.
+ */
+export const getRecentChats = async (userId: string, limit: number = 20): Promise<RecentChatInfo[]> => {
+  try {
+    // This query fetches the latest message timestamp for each character interaction
+    // Ensure the RPC function 'get_recent_chats' exists and accepts 'p_user_id' and 'p_limit'
+    const { data, error } = await supabase.rpc('get_recent_chats', { p_user_id: userId, p_limit: limit });
+
+
+    if (error) {
+      console.error('Error fetching recent chats via RPC:', error);
+      // Fallback or alternative logic if RPC fails or doesn't exist
+      // For now, just rethrow or return empty
+      throw error;
+    }
+
+    // Assuming the RPC function returns the correct structure
+    return (data as RecentChatInfo[]) || [];
+
+  } catch (error) {
+    console.error('Error in getRecentChats:', error);
     return [];
   }
 };
 
 
 /**
- * Get conversation details
- */
-// Replace Conversation with Chat
-export const getConversation = async (conversationId: string): Promise<Chat | null> => {
-  const cacheKey = `conversation:${conversationId}`;
-
-  // Add type assertion for cache result and ensure the table name is correct
-  return cache.getOrCompute(
-    cacheKey,
-    async () => DatabaseService.getById('chat_history', conversationId),
-    CONVERSATION_CACHE_TTL
-  ) as Promise<Chat | null>;
-};
-
-/**
- * Create a new conversation
- */
-export const createConversation = async (
-  userId: string,
-  characterId: string,
-  characterData: Record<string, any>,
-  initialTitle?: string
-// Replace Conversation with Chat
-): Promise<Chat | null> => {
-  try {
-    const title = initialTitle || `Chat with ${characterData.name || 'Character'}`;
-    
-    const newConversation: CreateConversation = {
-      user_id: userId,
-      character_id: characterId,
-      title,
-      is_favorite: false,
-      character_data: characterData as Json,
-      last_interaction_at: null, // Initialize as null
-      last_message_preview: null // Initialize as null
-    };
-
-    // Add type assertion for insert result and ensure table name is correct
-    const conversation = await DatabaseService.insert('chat_history', newConversation) as Chat | null;
-
-    if (conversation) {
-      // Update cache
-      cache.delete(`user:${userId}:conversations`);
-    }
-    
-    return conversation;
-  } catch (error) {
-    console.error('Error creating conversation:', error);
-    return null;
-  }
-};
-
-/**
- * Update conversation details
- */
-// Replace Conversation with Chat in updates type
-// Add userId parameter for cache invalidation
-export const updateConversation = async (
-  conversationId: string,
-  userId: string, // Added userId
-  updates: Partial<Chat>
-): Promise<boolean> => {
-  try {
-    // Perform the update first
-    const updated = await DatabaseService.update('chat_history', conversationId, updates); // Use 'chat_history' table
-
-    if (updated) { // Check if update was successful (DatabaseService.update should return boolean or updated row)
-      // Update cache
-      cache.delete(`conversation:${conversationId}`);
-      // Use the passed userId for cache invalidation
-      cache.delete(`user:${userId}:conversations`);
-      return true;
-    }
-
-    return false;
-  } catch (error) {
-    console.error('Error updating conversation:', error);
-    return false;
-  }
-};
-
-/**
- * Delete a conversation and its messages
- */
-export const deleteConversation = async (conversationId: string): Promise<boolean> => {
-  try {
-    // Get conversation first to get user_id for cache invalidation
-    const conversation = await getConversation(conversationId);
-    if (!conversation) return false;
-
-    // Use transaction to delete conversation and messages
-    const success = await DatabaseService.transaction(async () => {
-      // Delete all messages in the conversation using DatabaseService
-      const messagesResult = await DatabaseService.query('messages', {
-        filters: [{ column: 'conversation_id', operator: '=', value: conversationId }]
-      });
-
-      // Delete each message
-      for (const message of messagesResult.data) {
-        await DatabaseService.delete('messages', message.id);
-      }
-      
-      // Then delete the conversation
-      return await DatabaseService.delete('conversations', conversationId);
-    });
-    
-    if (success) {
-      // Update caches
-      cache.delete(`conversation:${conversationId}`);
-      cache.delete(`conversation:${conversationId}:messages`);
-      // Use conversation.user_id obtained before deletion
-      cache.delete(`user:${conversation.user_id}:conversations`);
-    }
-
-    return success || false;
-  } catch (error) {
-    console.error('Error deleting conversation:', error);
-    return false;
-  }
-};
-
-/**
- * Get all messages for a conversation
- */
-export const getConversationMessages = async (conversationId: string): Promise<Message[]> => {
-  const cacheKey = `conversation:${conversationId}:messages`;
-  
-  const result = await cache.getOrCompute(
-    cacheKey,
-    async () => {
-      const result = await DatabaseService.query('messages', {
-        filters: [{ column: 'conversation_id', operator: '=', value: conversationId }],
-        orderBy: { column: 'created_at', direction: 'asc' }
-      });
-      return result.data;
-    },
-    MESSAGES_CACHE_TTL
-  );
-  
-  return result || [];
-};
-
-/**
- * Send a message in a conversation
+ * Send a message and save it to the 'messages' table.
  */
 export const sendMessage = async (
-  conversationId: string,
-  senderType: 'user' | 'character',
+  userId: string,
+  characterId: number,
   content: string,
-  metadata?: Record<string, any>
+  sender: 'user' | 'ai' // Use the enum defined in the table
 ): Promise<Message | null> => {
   try {
-    // Corrected property name from conversation_id to chat_id
-    const newMessage: CreateMessage = {
-      chat_id: conversationId,
-      sender: senderType === 'character' ? 'assistant' : 'user', // Use 'sender' based on ChatMessage interface
+    const newMessage: MessageInsert = {
+      user_id: userId,
+      character_id: characterId,
       content,
-      // Assuming metadata is not part of the core ChatMessage type defined earlier
-      // metadata: metadata as Json // Remove or adjust based on actual 'messages' table schema if needed
+      sender: sender // Directly use the sender value
     };
 
-    const insertedMessage = await DatabaseService.insert('messages', newMessage);
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(newMessage)
+      .select()
+      .single();
 
-    if (insertedMessage) {
-      // Fetch the conversation to get the user_id before updating
-      const conversation = await getConversation(conversationId);
-      const chat = await getConversation(conversationId);
-      if (chat) {
-        // Update the chat's updated_at timestamp.
-        // The 'updates' object in updateConversation needs to match Partial<Chat>.
-        // Since 'updated_at' is likely managed by the DB, we might not need explicit update here,
-        // but if we do, it should be { updated_at: new Date().toISOString() }
-        // For now, we'll rely on the DB trigger or handle it if necessary elsewhere.
-        // We still need the userId for cache invalidation in updateConversation.
-        await updateConversation(conversationId, chat.user_id, { /* Pass valid updates if any */ });
-
-        // Update message cache
-        cache.delete(`conversation:${conversationId}:messages`);
-        // User conversation cache is handled within updateConversation now
-      } else {
-         console.warn(`Could not find conversation ${conversationId} to update after sending message.`);
-      }
+    if (error) {
+      console.error('Error sending message:', error);
+      throw error;
     }
 
-    // Assert the type of the returned message
-    return insertedMessage as Message | null;
+    return data;
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('Error in sendMessage:', error);
     return null;
   }
 };
 
 /**
- * Get multiple conversations by IDs
+ * Delete all messages between a user and character
  */
-// Replace Conversation[] with Chat[] and explicitly type 'conv'
-export const getConversationsByIds = async (ids: string[]): Promise<Chat[]> => {
-  const results = await Promise.all(
-    ids.map(id => getConversation(id))
-  );
+export const deleteChat = async (userId: string, characterId: number): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('user_id', userId)
+      .eq('character_id', characterId);
 
-  // Explicitly type 'conv' and use 'Chat' type guard
-  return results.filter((conv: Chat | null): conv is Chat => conv !== null);
+    if (error) {
+      console.error('Error deleting chat:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in deleteChat:', error);
+    return false;
+  }
 };
 
 /**
- * Toggle conversation favorite status
+ * Get paginated messages for a chat, ordered oldest to newest for display
  */
-export const toggleConversationFavorite = async (
-  conversationId: string,
-  userId: string, // Keep userId as it's needed for updateConversation
-  isFavorite: boolean
-): Promise<boolean> => {
-  // Cannot update is_favorite as it doesn't exist on chat_history table.
-  // This function's purpose needs re-evaluation based on schema.
-  // If 'is_favorite' were moved to 'profiles' or a linking table, logic would change.
-  // For now, log a warning and return false.
-  console.warn(`Attempted to toggle favorite on chat ${conversationId} for user ${userId}, but 'is_favorite' column does not exist on chat_history.`);
-  // Returning false as the intended operation cannot be completed.
-  // We avoid calling updateConversation unnecessarily.
-  return false;
-  // Original logic that would fail:
-  // return await updateConversation(conversationId, userId, { is_favorite: isFavorite });
+export const getPaginatedMessages = async (
+  userId: string,
+  characterId: number,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<{ messages: Message[], hasMore: boolean }> => {
+  try {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    // Fetch total count first (or adjust query if count is not needed every time)
+    const { count, error: countError } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true }) // head: true gets only count
+      .eq('user_id', userId)
+      .eq('character_id', characterId);
+
+     if (countError) {
+       console.error('Error fetching message count:', countError);
+       throw countError;
+     }
+
+    // Fetch the actual data page, ordered ascending for chat display
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('character_id', characterId)
+      .order('created_at', { ascending: true }) // Order ascending for display
+      .range(from, to);
+
+    if (error) {
+      console.error('Error fetching paginated messages:', error);
+      throw error;
+    }
+
+    return {
+      messages: data || [],
+      hasMore: count ? count > (page * pageSize) : false
+    };
+  } catch (error) {
+    console.error('Error in getPaginatedMessages:', error);
+    return { messages: [], hasMore: false };
+  }
 };
+
+/**
+ * Set up real-time subscription for new messages in a specific chat.
+ * Returns the channel instance so the caller can unsubscribe.
+ */
+export const subscribeToNewMessages = (
+  userId: string,
+  characterId: number,
+  onMessage: (message: Message) => void
+): RealtimeChannel => {
+  const channel = supabase
+    .channel(`chat-${userId}-${characterId}`) // Unique channel per chat
+    .on<Message>( // Specify the payload type
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `user_id=eq.${userId} AND character_id=eq.${characterId}`
+      },
+      (payload) => {
+        console.log('New message received:', payload.new);
+        onMessage(payload.new);
+      }
+    )
+    .subscribe((status, err) => {
+      if (err) {
+        console.error(`Error subscribing to chat ${userId}-${characterId}:`, err);
+      }
+      console.log(`Subscription status for chat ${userId}-${characterId}: ${status}`);
+    });
+
+  return channel;
+};
+
+/**
+ * Unsubscribe from a specific chat channel.
+ */
+export const unsubscribeFromChat = async (channel: RealtimeChannel) => {
+  if (channel) {
+    try {
+      const status = await channel.unsubscribe();
+      console.log(`Unsubscribed from channel ${channel.topic}, status: ${status}`);
+    } catch (error) {
+      console.error(`Error unsubscribing from channel ${channel.topic}:`, error);
+    }
+  }
+};
+
+// --- Functions related to old 'conversations'/'chat_history' schema are removed or commented out ---
