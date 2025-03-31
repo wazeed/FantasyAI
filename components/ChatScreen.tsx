@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,7 +30,21 @@ import {
   Message as DbMessage
 } from '../services/conversationService';
 import { recordCharacterInteraction } from '../services/characterService';
-import { v4 as uuidv4 } from 'uuid';
+import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+
+// Type for storing guest chat sessions locally
+type GuestChatSessionData = {
+  id: string; // Use characterId as the unique ID for guest sessions
+  characterId: string;
+  conversationId: string; // Can be a generated UUID for guest sessions
+  name: string;
+  avatar: string | number | null; // Allow null for avatar
+  lastMessage: string;
+  lastInteractionAt: string; // ISO string timestamp
+};
+
+const GUEST_CHATS_STORAGE_KEY = 'guestChats'; // Consistent key
 
 // Define navigation types for this component
 // Match the RootStackParamList from App.tsx
@@ -87,6 +101,8 @@ interface Character {
   avatar: any; // Changed from image to avatar
   tags?: string[];
   category?: string;
+  openingMessage?: string;
+  exampleQuestions?: string[];
 }
 
 interface ChatScreenProps {
@@ -100,9 +116,17 @@ interface ChatScreenProps {
 }
 
 export default function ChatScreen({ route, navigation }: ChatScreenProps) {
-  const { character, conversationId: existingConversationId } = route.params || {
-    character: { name: 'AI Assistant', avatar: require('../assets/char1.png') }
-  };
+  const { conversationId: existingConversationId, character: routeCharacter } = route.params || {};
+
+  // Memoize character object to stabilize useEffect dependency
+  const character = useMemo(() => ({
+    id: routeCharacter?.id || 'default',
+    name: routeCharacter?.name || 'AI Assistant',
+    avatar: routeCharacter?.avatar || require('../assets/char1.png'),
+    description: routeCharacter?.description || '',
+    tags: routeCharacter?.tags || [],
+    category: routeCharacter?.category || 'default'
+  }), [routeCharacter]); // Depend on the character object from route params
 
   const { user, isGuest, incrementGuestMessageCount, shouldShowSubscriptionOffer } = useAuth();
   const { isDarkMode } = useContext(ThemeContext);
@@ -116,9 +140,6 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
   const [conversationId, setConversationId] = useState<string | null>(existingConversationId || null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [showCloseButton, setShowCloseButton] = useState(false);
-
-  // Initialize animation values for messages
-  const [messageAnimations, setMessageAnimations] = useState(new Map());
 
   // Dynamic colors based on theme
   const colors = {
@@ -198,7 +219,7 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
 
               // Set initial message in app state
               setMessages([{
-                id: uuidv4(),
+                id: Crypto.randomUUID(),
                 text: welcomeMessage,
                 sender: 'ai',
                 timestamp: Date.now(),
@@ -206,9 +227,10 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
             }
           } else {
             // For guests, just show the welcome message in memory
+            const welcomeMessage = generateWelcomeMessage(character);
             setMessages([{
-              id: uuidv4(),
-              text: generateWelcomeMessage(character),
+              id: Crypto.randomUUID(),
+              text: welcomeMessage,
               sender: 'ai',
               timestamp: Date.now(),
             }]);
@@ -220,6 +242,10 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
       } finally {
         setLoading(false);
         setInitialLoadComplete(true);
+        // Force scroll to bottom after initial load
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       }
     };
 
@@ -239,107 +265,120 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [loading]);
+  }, [loading, TYPING_INDICATORS.length]);
 
+  // Clean up timeouts when component unmounts
   useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      const isUser = lastMessage.sender === 'user';
+    return () => {
+      if (closeButtonTimeoutRef.current) {
+        clearTimeout(closeButtonTimeoutRef.current);
+      }
+    };
+  }, []);
 
-      // Create new animated values for the last message
-      const newFadeAnim = new Animated.Value(0);
-      const newSlideAnim = new Animated.Value(isUser ? 50 : -50);
-
-      messageAnimations.set(lastMessage.id, {
-        fadeAnim: newFadeAnim,
-        slideAnim: newSlideAnim
-      });
-
-      // Start animations
-      Animated.parallel([
-        Animated.timing(newFadeAnim, {
-          toValue: 1,
-          duration: MESSAGE_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-        Animated.timing(newSlideAnim, {
-          toValue: 0,
-          duration: MESSAGE_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [messages]);
+  const animationRefs = useRef(new Map<string, {
+    fadeAnim: Animated.Value;
+    slideAnim: Animated.Value;
+  }>());
 
   const generateWelcomeMessage = (character: Character) => {
-    // Character-specific welcome messages with more personality and playfulness
-    const characterMessages = {
-      '1': [
-        `*lounging on a couch, scrolling through phone* 🙄 Oh great, it's you. Your brother warned me you'd text. What's your deal anyway?`,
-        `*looks up from phone with a smirk* Well well, if it isn't the troublemaker. Your brother's told me ALL about you... 😏`,
-        `*pretending to be busy* Ugh, fine. I guess we can talk. But make it interesting at least!`
-      ],
-      '2': [
-        `*rushes to phone excitedly* 💕 My love! I was just daydreaming about our next adventure together. What mischief shall we get into today?`,
-        `*sends virtual hug* 🤗 There's my favorite person! I've been reorganizing our photos all morning. Remember that time when...`,
-        `*dramatic pose* My heart skips a beat every time you message me! Tell me, what's on your mind, my dear?`
-      ],
-      '3': [
-        `EITA! 🇧🇷✨ Look who finally decided to message the charming Brazilian! Missing our late-night snack runs already? 😉`,
-        `*dancing samba* Oiiii! 💃 Just thinking about all the trouble we could get into... Want to practice some Portuguese? 😏`,
-        `*sends beach selfie* 🏖️ The sun's not as bright here without you! When are you coming to visit? We have so much catching up to do!`
-      ],
-      '4': [
-        `*bouncing off the walls* COUSIN!!! 🎮 I brought my new gaming console and ALL the snacks! Ready for an epic weekend? 🍕`,
-        `*already in pajamas* Sleepover time! I've got face masks, horror movies, and sooo much gossip to share! 🎭`,
-        `*ninja rolls into the room* Guess who's here to turn your boring weekend into an adventure? 🦹‍♂️`
-      ],
-      '5': [
-        `Fala mlk! 🎵 Just dropped a new track in the studio. Want a private listening session? 🎧`,
-        `E aí! 🏀 The crew's heading to the court later. You in? Promise I won't show you up too bad this time! 😎`,
-        `*freestyle rapping* Yo, check it! Got the whole squad asking about you. What's good? 🎤`
-      ],
-      '6': [
-        `*adjusts designer watch* 💼 I suppose our families' merger makes us... inevitable. Though I must admit, your Instagram presence is... intriguing.`,
-        `*sips expensive tea* 🫖 Well, since we're stuck in this arrangement, we might as well make it interesting. Tell me, what makes you different from the others?`,
-        `*checking portfolio* 📈 Our parents' plan is quite... strategic. But I'm more interested in your thoughts on the matter. Dinner at 8?`
-      ],
-      '7': [
-        `*revs motorcycle engine* 🏍️ Caught you staring at my bike earlier. Want to know what freedom feels like? 😏`,
-        `*polishing chrome* 🔧 Most people are too scared to message me. You've got guts, I'll give you that. What's your story?`,
-        `*leather jacket rustling* 🌙 Night ride under the stars? I know all the best roads... if you're brave enough.`
-      ],
-      '8': [
-        `*already doing push-ups* 💪 Ready to crush your fitness goals? First one to 100 reps wins! GO! 🏃‍♀️`,
-        `*mixing protein shake* 🥤 Your brother says you're ready to level up your fitness game. I like a challenge! Let's get you PUMPED!`,
-        `*stretching* 🧘‍♀️ Okay superstar, show me what you've got! Today's gonna be EPIC! 🌟`
-      ],
-      '9': [
-        `*adjusting glasses with intrigue* 📚 A student messaging after hours? Either you're exceptionally dedicated or... something else entirely.`,
-        `*marking papers* 📝 How curious... Most students avoid direct contact. You must be either very brave or very desperate.`,
-        `*closing laptop slowly* 🤔 Well, this is... unexpected. Do enlighten me on what academic emergency brings you here.`
-      ],
-      '10': [
-        `Aloha! 🏄‍♂️ Waves are perfect, sky's clear, and I've got an extra board with your name on it! Ready to catch some magic?`,
-        `*sand in hair* 🌺 Just finished teaching a class, but I saved the best spots for you! Ever surfed under a rainbow?`,
-        `*waxing surfboard* 🌊 Perfect timing! The ocean's calling our names. What do you say we make some waves? 🏖️`
-      ]
+    // Use provided opening message if available
+    if (character.openingMessage && character.exampleQuestions) {
+      const questionList = character.exampleQuestions
+        .map((q: string) => `• ${q}`)
+        .join('\n');
+      return `${character.openingMessage}\n\nHere are some things I can help with:\n${questionList}`;
+    }
+    
+    // Fallback to hyper-specific welcome messages and questions by AI assistant type
+    const aiAssistantConfigurations: Record<string, {messages: string[], questions: string[]}> = {
+      'finance-analyst': {
+        messages: [
+          `Hello! I'm ${character.name}, your AI financial expert assistant. ${character.description}`,
+          `I'm ${character.name}, your personal AI-powered financial assistant ready to help.`,
+          `Welcome to your financial command center with ${character.name}, your AI assistant. ${character.description}`
+        ],
+        questions: [
+          "How can I start investing with $100?",
+          "Explain the difference between a Roth IRA and a Traditional IRA.",
+          "What are some common budgeting mistakes to avoid?",
+          "Is now a good time to buy stocks?",
+          "Help me create a plan to pay off my student loans faster."
+        ]
+      },
+      'travel-guide': {
+        messages: [
+          `Bon voyage! I'm ${character.name}, your personal travel assistant. ${character.description}`,
+          `Pack your bags! ${character.name} here to craft your dream vacation.`,
+          `Ready to explore? ${character.name} at your service. ${character.description}`
+        ],
+        questions: [
+          "What are the must-see sights in Paris for a 5-day trip?",
+          "Suggest budget-friendly travel destinations in Southeast Asia.",
+          "How do I apply for a visa for Brazil?",
+          "What are essential items to pack for a hiking trip in the Rockies?",
+          "Find family-friendly resorts in Cancun with good reviews."
+        ]
+      },
+      'health-coach': {
+        messages: [
+          `Hi! I'm ${character.name}, your wellness assistant. ${character.description}`,
+          `Let's build healthy habits! ${character.name} here to support you.`,
+          `Your health journey starts now with ${character.name}. ${character.description}`
+        ],
+        questions: [
+          "Give me some healthy snack ideas for work.",
+          "How can I improve my sleep quality?",
+          "Suggest exercises to strengthen my lower back.",
+          "What are the benefits of meditation?",
+          "Create a simple weekly meal prep plan."
+        ]
+      },
+      'tech-mentor': {
+        messages: [
+          `Hello World! I'm ${character.name}, your coding assistant. ${character.description}`,
+          `Let's debug this together! ${character.name} at your service.`,
+          `Your tech questions answered by ${character.name}. ${character.description}`
+        ],
+        questions: [
+          "Explain how APIs work in simple terms.",
+          "What's the difference between front-end and back-end development?",
+          "How do I set up a GitHub repository?",
+          "Suggest resources for learning Python for beginners.",
+          "Debug this JavaScript code: `[code snippet placeholder]`" // Note: Placeholder needs real code
+        ]
+      },
+      'default': {
+        messages: [
+          `Hello! I'm ${character.name}. ${character.description}. How can I assist you?`,
+          `Hi there! ${character.name} here. What would you like to accomplish today?`,
+          `Welcome! I'm ${character.name}. Ready to help you with specialized knowledge.`
+        ],
+        questions: [
+          "What are your top recommendations in this field?",
+          "Help me understand advanced concepts in this area",
+          "What common mistakes should I avoid?",
+          "Suggest practical applications for this knowledge",
+          "What resources would you recommend to learn more?"
+        ]
+      }
     };
 
-    // More engaging default messages
-    const defaultMessages = [
-      `*eyes lighting up* Hey there! I'm ${character.name} and I've got a feeling we're going to have some amazing conversations! ${character.description} 🌟`,
-      `*doing a little dance* Hi! ${character.name} here, ready to make your day more interesting! What's on your mind? ✨`,
-      `*strikes a pose* Ta-da! I'm ${character.name}, and I've been waiting for someone like you to chat with! Let's make this fun! 🎭`,
-      `*appears in a puff of glitter* Greetings! I'm ${character.name}, your new favorite conversation partner! Ready for an adventure? 🚀`
-    ];
+    // Determine AI assistant type
+    const assistantType = character.category?.toLowerCase().replace(/\s+/g, '-') || 'default';
+    const assistantConfig = aiAssistantConfigurations[assistantType] || aiAssistantConfigurations['default'];
 
-    // Get character-specific messages or use defaults
-    const charMessages = characterMessages[character.id as keyof typeof characterMessages] || defaultMessages;
+    // Format customized welcome message
+    const welcomeMessage = assistantConfig.messages.at(Math.floor(Math.random() * assistantConfig.messages.length)) ?? assistantConfig.messages[0];
+    const questionList = assistantConfig.questions
+      .map((q:string) => `• ${q}`)
+      .join('\n');
+    
+    return `${welcomeMessage}\n\nHere are specific things I can help with:\n${questionList}`;
 
-    // Return a random message from the available options
-    return charMessages[Math.floor(Math.random() * charMessages.length)];
   };
+
+  const closeButtonTimeoutRef = useRef<NodeJS.Timeout>();
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
@@ -349,26 +388,32 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
 
     // Create a user message object
     const newUserMessage: Message = {
-      id: uuidv4(),
+      id: Crypto.randomUUID(),
       text: userMessage,
       sender: 'user',
       timestamp: Date.now(),
     };
 
-    // Add user message to UI
-    setMessages(prev => [...prev, newUserMessage]);
-
-    // Increment guest message count if in guest mode
-    if (isGuest) {
-      await incrementGuestMessageCount();
-
+    
+        // Add user message to UI
+        setMessages(prev => [...prev, newUserMessage]);
+    
+        // Increment guest message count and update session if in guest mode
+        if (isGuest) {
+          await incrementGuestMessageCount();
+          await updateGuestChatSession(userMessage); // Update guest session
       // Check if we should show subscription offer
       const shouldShowOffer = await shouldShowSubscriptionOffer();
       if (shouldShowOffer) {
+        // Clear any existing timeout
+        if (closeButtonTimeoutRef.current) {
+          clearTimeout(closeButtonTimeoutRef.current);
+        }
+        
         setShowCloseButton(false);
-        setTimeout(() => {
+        closeButtonTimeoutRef.current = setTimeout(() => {
           setShowCloseButton(true);
-        }, 15000); // Show close button after 15 seconds
+        }, 5000); // Show close button after 5 seconds in dev mode
         // Navigate to DiscountOfferScreen instead, passing the state
         navigation.navigate('DiscountOfferScreen', { fromCharacter: true });
         return;
@@ -400,7 +445,7 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
 
       // Create an AI message object
       const newAIMessage: Message = {
-        id: uuidv4(),
+        id: Crypto.randomUUID(),
         text: aiResponse,
         sender: 'ai',
         timestamp: Date.now(),
@@ -408,6 +453,11 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
 
       // Add AI message to UI
       setMessages(prev => [...prev, newAIMessage]);
+
+      // Update guest session if applicable (after adding AI message to UI)
+      if (isGuest) {
+        await updateGuestChatSession(aiResponse); // Update with AI response preview
+      }
 
       // Save AI message to database if user is logged in
       if (user && !isGuest && conversationId) {
@@ -430,6 +480,58 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
       setLoading(false);
     }
   };
+
+  // Function to update guest chat session in AsyncStorage
+  const updateGuestChatSession = async (lastMessageText: string) => {
+    if (!isGuest) return; // Only run for guests
+
+    try {
+      const now = new Date().toISOString();
+      const currentChatsRaw = await AsyncStorage.getItem(GUEST_CHATS_STORAGE_KEY);
+      let currentChats: GuestChatSessionData[] = [];
+
+      if (currentChatsRaw) {
+        try {
+          currentChats = JSON.parse(currentChatsRaw);
+          if (!Array.isArray(currentChats)) currentChats = [];
+        } catch (e) {
+          console.error("Failed to parse guest chats, resetting.", e);
+          currentChats = [];
+        }
+      }
+
+      const existingIndex = currentChats.findIndex(chat => chat.characterId === character.id);
+      const sessionData: GuestChatSessionData = {
+        id: character.id, // Use characterId as unique ID for guest sessions
+        characterId: character.id,
+        conversationId: conversationId || Crypto.randomUUID(), // Use existing or generate new UUID for guest convo ID
+        name: character.name,
+        // Store null for avatar in guest sessions, as require() results aren't serializable.
+        // ChatListScreen will use a placeholder based on this null.
+        avatar: null,
+        lastMessage: lastMessageText.substring(0, 100), // Truncate preview
+        lastInteractionAt: now,
+      };
+
+      if (existingIndex > -1) {
+        // Update existing session
+        currentChats[existingIndex] = sessionData;
+      } else {
+        // Add new session
+        currentChats.push(sessionData);
+      }
+
+      // Sort by date and limit
+      currentChats.sort((a, b) => new Date(b.lastInteractionAt).getTime() - new Date(a.lastInteractionAt).getTime());
+      const limitedChats = currentChats.slice(0, 15); // Keep only the 15 most recent
+
+      await AsyncStorage.setItem(GUEST_CHATS_STORAGE_KEY, JSON.stringify(limitedChats));
+
+    } catch (error) {
+      console.error("Error updating guest chat session:", error);
+    }
+  };
+
 
   const fetchAIResponse = async (
     userInput: string,
@@ -505,10 +607,10 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
     const isUser = item.sender === 'user';
 
     // Initialize animation values if they don't exist for this message
-    if (!messageAnimations.has(item.id)) {
+    if (!animationRefs.current.has(item.id)) {
       const fadeAnim = new Animated.Value(0);
       const slideAnim = new Animated.Value(isUser ? 50 : -50); // Adjust initial slide based on sender
-      messageAnimations.set(item.id, { fadeAnim, slideAnim });
+      animationRefs.current.set(item.id, { fadeAnim, slideAnim });
 
       // Start animation
       Animated.parallel([
@@ -526,7 +628,7 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
     }
 
     // Get animation values
-    const messageAnimation = messageAnimations.get(item.id) || { fadeAnim: new Animated.Value(1), slideAnim: new Animated.Value(0) };
+    const messageAnimation = animationRefs.current.get(item.id) || { fadeAnim: new Animated.Value(1), slideAnim: new Animated.Value(0) };
 
     // Format timestamp for display
     const messageDate = new Date(item.timestamp);
@@ -585,7 +687,7 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
         )}
       </Animated.View>
     );
-  }, [isDarkMode, character, messageAnimations, colors]); // Include colors in dependency array
+  }, [isDarkMode, character, colors]); // Include colors in dependency array
 
   const handleBack = () => {
     // Navigate back to the main tabs screen which contains the home tab
