@@ -10,8 +10,8 @@ import {
   SafeAreaView,
   StatusBar,
   TextInput,
-  ScrollView,
-  Animated,
+  ScrollView, // Keep ScrollView if needed for categories, otherwise remove
+  Animated, // Keep Animated import if needed elsewhere, or remove if not
   RefreshControl,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,9 +26,9 @@ type Tool = {
   id: string;
   name: string;
   description: string;
-  image: any;
+  image: any; // Keep for now, needed for navigation params
   tags: string[];
-  followers: string;
+  followers: string; // Keep for now, might remove if completely unused
   category: string;
   suggestedQuestions: string[];
 };
@@ -44,7 +44,7 @@ type RootStackParamList = {
   Chat: { character: {
     id: string;
     name: string;
-    avatar: any;
+    avatar: any; // Keep image for chat screen compatibility for now
     description?: string;
     tags?: string[];
     category?: string;
@@ -69,15 +69,20 @@ type HomeScreenProps = {
 };
 
 const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = width / 2 - 24;
+// Adjusted column width calculation for better spacing
+const PADDING_HORIZONTAL = 16;
+const GAP = 16;
+const NUM_COLUMNS = 2;
+const COLUMN_WIDTH = (width - PADDING_HORIZONTAL * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
-// New tools/categories data
+
+// New tools/categories data (Keep original data structure for now)
 const TOOLS = [
   {
     id: 'self-growth',
     name: 'Self-Growth',
     description: 'Become a better version of yourself',
-    image: require('../assets/char1.png'),
+    image: require('../assets/char1.png'), // Keep image ref for now
     tags: ['Personal', 'Development', 'Improvement'],
     followers: '1.2M',
     category: 'Life',
@@ -357,16 +362,36 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     background: isDarkMode ? '#121212' : '#FFFFFF',
     text: isDarkMode ? '#FFFFFF' : '#000000',
     subText: isDarkMode ? '#AAAAAA' : '#666666',
-    card: isDarkMode ? '#1E1E1E' : '#F5F5F5',
-    cardBorder: isDarkMode ? '#333333' : '#E0E0E0',
+    card: isDarkMode ? '#1E1E1E' : '#FFFFFF', // Use white for light mode cards
+    cardBorder: isDarkMode ? '#333333' : '#E0E0E0', // Lighter border for light mode
     accent: isDarkMode ? '#3D8CFF' : '#7E3AF2',
     categoryBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
     categorySelected: isDarkMode ? '#3D8CFF' : '#7E3AF2',
     categoryText: isDarkMode ? '#FFFFFF' : '#000000',
     searchBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
-    tagBg: isDarkMode ? 'rgba(79,70,229,0.15)' : 'rgba(126,58,242,0.1)',
-    tagText: isDarkMode ? '#3D8CFF' : '#7E3AF2',
+    // Removed tag styles as they are no longer used
     buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
+  };
+
+  // Icon mapping for tools (defined inside component scope)
+  const TOOL_ICONS: { [key: string]: { name: keyof typeof Ionicons.glyphMap; color: string } } = {
+    'self-growth': { name: 'ribbon-outline', color: '#34D399' }, // Teal/Green
+    'lifestyle': { name: 'sunny-outline', color: '#FBBF24' }, // Yellow/Orange
+    'spirituality': { name: 'sparkles-outline', color: '#A78BFA' }, // Purple
+    'fitness': { name: 'barbell-outline', color: '#EF4444' }, // Red
+    'career': { name: 'briefcase-outline', color: '#60A5FA' }, // Blue
+    'emails': { name: 'mail-outline', color: '#93C5FD' }, // Light Blue
+    'lyrics-poetry': { name: 'musical-notes-outline', color: '#F472B6' }, // Pink
+    'fun': { name: 'game-controller-outline', color: '#EC4899' }, // Magenta
+    'link-ask': { name: 'link-outline', color: '#2DD4BF' }, // Cyan
+    'languages': { name: 'language-outline', color: '#818CF8' }, // Indigo
+    'math': { name: 'calculator-outline', color: '#F87171' }, // Light Red
+    'ai-learning': { name: 'school-outline', color: '#6EE7B7' }, // Light Green
+    'school': { name: 'library-outline', color: '#FCD34D' }, // Amber
+    'social-media': { name: 'share-social-outline', color: '#A5B4FC' }, // Light Indigo
+    'quote-maker': { name: 'chatbubble-ellipses-outline', color: '#C4B5FD' }, // Light Purple
+    'ai-scanner': { name: 'scan-outline', color: '#7DD3FC' }, // Sky Blue
+    'translator': { name: 'swap-horizontal-outline', color: '#FDA4AF' }, // Light Pink
   };
 
   const handleCategoryPress = (selectedId: string) => {
@@ -394,7 +419,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             character: {
               id: tool.id,
               name: tool.name,
-              avatar: tool.image,
+              avatar: tool.image, // Keep image for now for chat screen
               description: tool.description,
               tags: tool.tags,
               category: tool.category
@@ -412,7 +437,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       character: {
         id: tool.id,
         name: tool.name,
-        avatar: tool.image,
+        avatar: tool.image, // Keep image for now for chat screen
         description: tool.description,
         tags: tool.tags,
         category: tool.category
@@ -455,65 +480,43 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     </TouchableOpacity>
   );
 
-  const renderTagItem = (tag: string) => (
-    <View style={[styles.tagItem, { backgroundColor: colors.tagBg }]}>
-      <Text style={[styles.tagText, { color: colors.tagText }]}>{tag}</Text>
-    </View>
-  );
+  // Define renderToolItem inside the component to access scope
+  const renderToolItem = ({ item }: { item: Tool }) => {
+    const iconInfo = TOOL_ICONS[item.id] || { name: 'help-circle-outline', color: colors.accent };
 
-  const renderToolItem = ({ item }: { item: Tool }) => (
-    <TouchableOpacity
-      style={[
-        styles.toolCard,
-        { width: COLUMN_WIDTH },
-        isDarkMode ? styles.darkCard : styles.lightCard
-      ]}
-      onPress={() => handleToolPress(item)}
-      activeOpacity={0.8}
-    >
-      <View style={styles.toolImageContainer}>
-        <Image source={item.image} style={styles.toolImage} />
-        <View style={[styles.categoryTag, { backgroundColor: colors.accent }]}>
-          <Text style={[styles.categoryTagText, { color: '#FFFFFF' }]}>{item.category}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.toolInfo}>
-        <Text style={[styles.toolName, { color: colors.text }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        
-        <Text style={[styles.toolDescription, { color: colors.subText }]} numberOfLines={2}>
-          {item.description}
-        </Text>
-        
-        <View style={styles.tagsContainer}>
-          {item.tags.slice(0, 3).map((tag, index) =>
-            <View key={`${item.id}-tag-${index}`}>
-              {renderTagItem(tag)}
-            </View>
-          )}
+    return (
+      <TouchableOpacity
+        style={[
+          styles.toolCard,
+          { width: COLUMN_WIDTH },
+          isDarkMode ? styles.darkCard : styles.lightCard
+        ]}
+        onPress={() => handleToolPress(item)}
+        activeOpacity={0.8}
+      >
+        {/* Icon Container */}
+        <View style={[styles.iconContainer, { backgroundColor: iconInfo.color }]}>
+          <Ionicons 
+            name={iconInfo.name} 
+            size={32} // Consistent icon size
+            color="#FFFFFF" // White icon color
+          />
         </View>
         
-        <View style={styles.toolMeta}>
-          <View style={styles.followerCount}>
-            <Ionicons name="people-outline" size={14} color={colors.subText} />
-            <Text style={[styles.followerText, { color: colors.subText }]}>
-              {item.followers}
-            </Text>
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.chatButton, { backgroundColor: colors.accent }]} 
-            onPress={() => handleToolPress(item)}
-          >
-            <Text style={styles.chatButtonText}>Use</Text>
-            <Ionicons name="chatbubble-outline" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
+        <View style={styles.toolInfo}>
+          <Text style={[styles.toolName, { color: colors.text }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          
+          <Text style={[styles.toolDescription, { color: colors.subText }]} numberOfLines={2}>
+            {item.description}
+          </Text>
+          
+          {/* Tags and Meta removed */}
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const filteredTools = searchQuery 
     ? TOOLS.filter(tool => 
@@ -569,7 +572,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       
       <FlatList
         data={filteredTools}
-        renderItem={renderToolItem}
+        renderItem={renderToolItem} // Use the new renderToolItem
         keyExtractor={(item) => item.id}
         numColumns={2}
         contentContainerStyle={styles.toolsList}
@@ -583,9 +586,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    // backgroundColor managed by theme
   },
-  darkContainer: {
+  darkContainer: { // Keep for potential future use if needed elsewhere
     backgroundColor: '#121212',
   },
   header: {
@@ -627,13 +630,14 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 20,
+    marginHorizontal: PADDING_HORIZONTAL, // Use constant
     marginTop: 16,
     marginBottom: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 24,
     borderWidth: 1,
+    borderColor: '#333333', // Default border, adjust if needed
   },
   darkSearchContainer: {
     backgroundColor: '#2A2A2A',
@@ -643,60 +647,58 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderColor: '#EEEEEE',
   },
-  searchIcon: {
+  searchIcon: { // Keep if needed, though icon is directly in JSX now
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
   },
-  darkSearchInput: {
+  darkSearchInput: { // Keep for potential theme adjustments
     color: '#FFFFFF',
   },
-  lightSearchInput: {
+  lightSearchInput: { // Keep for potential theme adjustments
     color: '#000000',
   },
-  sectionHeader: {
+  sectionHeader: { // Keep if needed elsewhere
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: PADDING_HORIZONTAL,
     marginTop: 20,
     marginBottom: 10,
   },
-  sectionTitle: {
+  sectionTitle: { // Keep if needed elsewhere
     fontSize: 20,
     fontWeight: '700',
   },
-  darkSectionTitle: {
+  darkSectionTitle: { // Keep if needed elsewhere
     color: '#FFFFFF',
   },
-  lightSectionTitle: {
+  lightSectionTitle: { // Keep if needed elsewhere
     color: '#000000',
   },
-  viewAllButton: {
+  viewAllButton: { // Keep if needed elsewhere
     flexDirection: 'row',
     alignItems: 'center',
   },
-  viewAllText: {
+  viewAllText: { // Keep if needed elsewhere
     fontSize: 14,
     marginRight: 4,
   },
-  darkViewAllText: {
+  darkViewAllText: { // Keep if needed elsewhere
     color: '#0070F3',
   },
-  lightViewAllText: {
+  lightViewAllText: { // Keep if needed elsewhere
     color: '#0070F3',
   },
   categoriesList: {
-    paddingLeft: 20,
+    paddingLeft: PADDING_HORIZONTAL,
+    paddingRight: PADDING_HORIZONTAL - 12, // Adjust for last item margin
     marginBottom: 16,
   },
   categoriesContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 8,
+    // Removed as FlatList handles horizontal layout now
   },
   categoryItem: {
     paddingHorizontal: 16,
@@ -705,133 +707,80 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   categoryItemSelected: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 12,
+    // Can potentially merge with categoryItem if only background changes
   },
   categoryText: {
     fontSize: 14,
     fontWeight: '500',
   },
   categoryTextSelected: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600', // Make selected bolder
   },
   toolsList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: PADDING_HORIZONTAL,
     paddingBottom: 24,
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    // Removed paddingHorizontal, handled by toolsList padding and GAP
   },
   toolCard: {
-    marginBottom: 20,
-    borderRadius: 24,
-    overflow: 'hidden',
+    marginBottom: GAP, // Use GAP constant
+    borderRadius: 16,
+    overflow: 'hidden', // Keep overflow hidden
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4.65,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+    // Width is set dynamically
   },
   darkCard: {
     backgroundColor: '#1E1E1E',
+    borderWidth: 1, // Add subtle border in dark mode
+    borderColor: '#2A2A2A',
   },
   lightCard: {
     backgroundColor: '#FFFFFF',
+    borderWidth: 1, // Add subtle border in light mode
+    borderColor: '#F0F0F0',
   },
-  toolImageContainer: {
-    position: 'relative',
-    height: 180,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-  },
-  toolImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  categoryTag: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  categoryTagText: {
-    fontSize: 12,
-    fontWeight: '600',
+  iconContainer: { // Added style for icon container
+    width: 56, // Match reference image size
+    height: 56,
+    borderRadius: 12, // Rounded square
+    justifyContent: 'center',
+    alignItems: 'center',
+    // alignSelf: 'flex-start', // Align icon to the start of the card - Removed for centering
+    margin: 14, // Add margin around the icon container
+    marginBottom: 8, // Reduced bottom margin
   },
   toolInfo: {
-    padding: 14,
+    paddingHorizontal: 14, // Horizontal padding
+    paddingBottom: 14, // Bottom padding
+    paddingTop: 0, // Remove top padding as icon is above
   },
   toolName: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16, // Slightly smaller font size
+    fontWeight: '600', // Medium weight
     marginBottom: 4,
+    textAlign: 'left', // Align text left
   },
   toolDescription: {
     fontSize: 13,
-    marginBottom: 10,
     lineHeight: 18,
+    textAlign: 'left', // Align text left
+    // Removed marginBottom
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 10,
-  },
-  tagItem: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  toolMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  followerCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  followerText: {
-    marginLeft: 5,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  chatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-  },
-  chatButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  // Removed unused styles: toolImageContainer, toolImage, categoryTag, categoryTagText, tagsContainer, tagItem, tagText, toolMeta, followerCount, followerText, chatButton, chatButtonText
   emptyStateContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    marginTop: 40, // Add some margin from categories
   },
-  emptyStateImage: {
+  emptyStateImage: { // Keep if you add an image later
     width: 120,
     height: 120,
     marginBottom: 20,
@@ -849,13 +798,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 24,
   },
-  actionButton: {
+  actionButton: { // Keep if needed for empty state
     backgroundColor: '#0070F3',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 24,
   },
-  actionButtonText: {
+  actionButtonText: { // Keep if needed for empty state
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
