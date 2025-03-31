@@ -7,7 +7,16 @@ const cache = CacheService.getInstance();
 const CONVERSATION_CACHE_TTL = 5; // Cache conversations for 5 minutes
 const MESSAGES_CACHE_TTL = 5; // Cache messages for 5 minutes
 
-type CreateConversation = Omit<Conversation, 'id' | 'created_at' | 'updated_at'>;
+// Explicitly define the type for creating conversations
+type CreateConversation = {
+  user_id: string;
+  character_id: string;
+  title: string;
+  is_favorite: boolean;
+  character_data?: Json | null;
+  last_message_preview?: string | null;
+  last_interaction_at: string | null; // Initialize as null
+};
 type CreateMessage = Omit<Message, 'id' | 'created_at'>;
 
 /**
@@ -30,6 +39,28 @@ export const getUserConversations = async (userId: string): Promise<Conversation
   
   return result || [];
 };
+
+/**
+ * Get recent conversations for a user, ordered by last interaction
+ */
+export const getRecentConversations = async (userId: string, limit: number = 15): Promise<Conversation[]> => {
+  // No caching for recent conversations as they change frequently,
+  // or use a very short TTL if needed.
+  try {
+    const result = await DatabaseService.query('conversations', {
+      filters: [{ column: 'user_id', operator: '=', value: userId }],
+      orderBy: { column: 'last_interaction_at', direction: 'desc' },
+      limit: limit
+    });
+    // Ensure last_interaction_at is not null if the DB allows nulls and we want only interacted chats
+    // return (result.data || []).filter(c => c.last_interaction_at);
+    return result.data || [];
+  } catch (error) {
+    console.error('Error fetching recent conversations:', error);
+    return [];
+  }
+};
+
 
 /**
  * Get conversation details
@@ -61,7 +92,9 @@ export const createConversation = async (
       character_id: characterId,
       title,
       is_favorite: false,
-      character_data: characterData as Json
+      character_data: characterData as Json,
+      last_interaction_at: null, // Initialize as null
+      last_message_preview: null // Initialize as null
     };
     
     const conversation = await DatabaseService.insert('conversations', newConversation);
@@ -175,7 +208,8 @@ export const sendMessage = async (
     const newMessage: CreateMessage = {
       conversation_id: conversationId,
       sender_type: senderType,
-      role: senderType, // For compatibility
+      // Map 'character' sender type to 'assistant' role for AI model compatibility
+      role: senderType === 'character' ? 'assistant' : 'user',
       content,
       metadata: metadata as Json
     };

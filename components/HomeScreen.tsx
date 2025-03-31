@@ -18,456 +18,339 @@ import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+
+// Define types for our data structures
+type Tool = {
+  id: string;
+  name: string;
+  description: string;
+  image: any;
+  tags: string[];
+  followers: string;
+  category: string;
+  suggestedQuestions: string[];
+};
+
+type Category = {
+  id: string;
+  name: string;
+  selected: boolean;
+};
+
+type RootStackParamList = {
+  Home: undefined;
+  Chat: { character: {
+    id: string;
+    name: string;
+    avatar: any;
+    description?: string;
+    tags?: string[];
+    category?: string;
+  }};
+  DiscountOfferScreen: {
+    fromCharacter: boolean;
+    character: {
+      id: string;
+      name: string;
+      avatar: any;
+      description?: string;
+      tags?: string[];
+      category?: string;
+    }
+  };
+  Profile: undefined;
+  HelpCenter: undefined;
+};
+
+type HomeScreenProps = {
+  navigation: BottomTabNavigationProp<RootStackParamList, 'Home'>;
+};
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = width / 2 - 24;
 
-// Mock data for characters
-const CHARACTERS = [
+// New tools/categories data
+const TOOLS = [
   {
-    id: '1',
-    name: 'Max',
-    description: 'Max is a 27-year-old man who is your brother\'s friend but he has hatred for you',
+    id: 'self-growth',
+    name: 'Self-Growth',
+    description: 'Become a better version of yourself',
     image: require('../assets/char1.png'),
-    tags: ['Cold', 'Loyal', 'Flirtatious', 'Jealous'],
-    followers: '1.8M',
-    category: 'Original'
+    tags: ['Personal', 'Development', 'Improvement'],
+    followers: '1.2M',
+    category: 'Life',
+    suggestedQuestions: [
+      "How can I develop better daily habits?",
+      "What are some ways to boost my confidence?",
+      "How do I stay motivated when working on self-improvement?",
+      "What books would you recommend for personal growth?"
+    ]
   },
   {
-    id: '2',
-    name: 'Yuto',
-    description: 'You have autism. You are Yuto\'s wife he is 25 years old and you are 21 years old',
+    id: 'lifestyle',
+    name: 'Lifestyle',
+    description: 'Fill your life with purpose and joy',
     image: require('../assets/char2.png'),
-    tags: ['Protective', 'Gentle', 'Romance', 'Billionaire'],
-    followers: '1.8M',
-    category: 'Original'
+    tags: ['Habits', 'Routines', 'Wellbeing'],
+    followers: '980K',
+    category: 'Life',
+    suggestedQuestions: [
+      "How can I create a more balanced daily routine?",
+      "What are some ways to reduce stress in my life?",
+      "How do I find more meaning in my daily activities?",
+      "What small changes can I make to improve my wellbeing?"
+    ]
   },
   {
-    id: '3',
-    name: 'Axel',
-    description: 'Did the exchange player fall in love with you? 🇺🇸 🇧🇷 ❤️',
+    id: 'spirituality',
+    name: 'Spirituality',
+    description: 'Enrich your life with wisdom',
     image: require('../assets/char3.png'),
-    tags: ['Dominant', 'Romance', 'First Love', 'Sharp-tongued'],
-    followers: '11.5M',
-    category: 'Original'
+    tags: ['Mindfulness', 'Meditation', 'Philosophy'],
+    followers: '1.5M',
+    category: 'Life',
+    suggestedQuestions: [
+      "How can I start a meditation practice?",
+      "What are some simple mindfulness exercises?",
+      "How do I find inner peace in stressful times?",
+      "What spiritual practices would you recommend for beginners?"
+    ]
   },
   {
-    id: '4',
-    name: 'Charlotte',
-    description: 'Your cousin who is over for the weekend',
+    id: 'fitness',
+    name: 'Fitness',
+    description: 'Achieve your fitness goals',
     image: require('../assets/char4.png'),
-    tags: ['Playful', 'Mischievous', 'Family'],
-    followers: '6.7M',
-    category: 'Original'
+    tags: ['Workouts', 'Nutrition', 'Health'],
+    followers: '2.3M',
+    category: 'Health',
+    suggestedQuestions: [
+      "What's a good beginner workout routine?",
+      "How can I stay consistent with exercise?",
+      "What foods should I eat to support my fitness goals?",
+      "How do I prevent injuries when working out?"
+    ]
   },
   {
-    id: '5',
-    name: 'Paulo',
-    description: 'Can I play ball with the mlk...',
+    id: 'career',
+    name: 'Career',
+    description: 'Get your work done faster',
     image: require('../assets/char5.png'),
-    tags: ['Text Game', 'Loyal', 'Gentle', 'Jealous'],
-    followers: '3.5M',
-    category: 'Original'
+    tags: ['Productivity', 'Skills', 'Growth'],
+    followers: '1.8M',
+    category: 'Work',
+    suggestedQuestions: [
+      "How can I be more productive at work?",
+      "What skills are most valuable in my industry?",
+      "How do I negotiate a better salary?",
+      "What's the best way to handle workplace conflicts?"
+    ]
   },
   {
-    id: '6',
-    name: 'Nishimura Riki',
-    description: 'Riki | forced marriage for our dad\'s companies 💮',
+    id: 'emails',
+    name: 'Emails',
+    description: 'Craft emails in seconds',
     image: require('../assets/char6.png'),
-    tags: ['Elegant', 'Movies&TV', 'Romance'],
-    followers: '1.9M',
-    category: 'Original'
+    tags: ['Professional', 'Communication', 'Business'],
+    followers: '1.1M',
+    category: 'Work',
+    suggestedQuestions: [
+      "How do I write a professional follow-up email?",
+      "What's a good subject line for a sales email?",
+      "How can I make my emails more concise?",
+      "What's the best way to structure a business email?"
+    ]
   },
   {
-    id: '7',
-    name: 'Biker Boy',
-    description: 'He is very selfish but kinda sweet.',
+    id: 'lyrics-poetry',
+    name: 'Lyrics & Poetry',
+    description: 'Make songs and poems',
     image: require('../assets/char7.png'),
-    tags: ['OC', 'Student', 'Cold', 'Gentle', 'Badboy'],
-    followers: '16.3M',
-    category: 'Original'
+    tags: ['Creative', 'Writing', 'Artistic'],
+    followers: '890K',
+    category: 'Creative',
+    suggestedQuestions: [
+      "How do I write a catchy chorus?",
+      "What are some good rhyme schemes for poetry?",
+      "How can I improve my songwriting skills?",
+      "What makes a poem emotionally powerful?"
+    ]
   },
   {
-    id: '8',
-    name: 'Sarah',
-    description: 'Your friends younger sister who you\'re taking to the gym.',
+    id: 'fun',
+    name: 'Fun',
+    description: 'Explore exciting activities',
     image: require('../assets/char8.png'),
-    tags: ['Sweet', 'Cute', 'Pure', 'Dedicated'],
-    followers: '4.2M',
-    category: 'Original'
+    tags: ['Games', 'Entertainment', 'Leisure'],
+    followers: '1.4M',
+    category: 'Entertainment',
+    suggestedQuestions: [
+      "What are some fun party games for adults?",
+      "How can I make a game night more exciting?",
+      "What are some creative date night ideas?",
+      "How do I plan a memorable weekend getaway?"
+    ]
   },
   {
-    id: '9',
-    name: 'Professor James',
-    description: 'Your strict but fair history professor with a mysterious past',
+    id: 'link-ask',
+    name: 'Link & Ask',
+    description: 'Explore any web content',
     image: require('../assets/char9.png'),
-    tags: ['Intellectual', 'Strict', 'Mentor', 'Mysterious'],
-    followers: '2.7M',
-    category: 'Original'
+    tags: ['Research', 'Information', 'Learning'],
+    followers: '1.6M',
+    category: 'Education',
+    suggestedQuestions: [
+      "How do I research a topic effectively?",
+      "What are some reliable sources for news?",
+      "How can I verify information I find online?",
+      "What's the best way to summarize long articles?"
+    ]
   },
   {
-    id: '10',
-    name: 'Kai',
-    description: 'A surfing instructor you met on vacation who seems to be hiding something',
+    id: 'languages',
+    name: 'Languages',
+    description: 'Simplify your language learning',
     image: require('../assets/char10.png'),
-    tags: ['Carefree', 'Athletic', 'Secretive', 'Charming'],
-    followers: '8.1M',
-    category: 'Original'
-  },
-  
-  // Fantasy Characters
-  {
-    id: 'fantasy1',
-    name: 'Gandalf',
-    description: 'The wise wizard from Middle Earth who guides heroes on their journey',
-    image: require('../assets/character/fantasy1.png'),
-    tags: ['Wise', 'Powerful', 'Mysterious', 'Mentor'],
-    followers: '15.2M',
-    category: 'Fantasy'
+    tags: ['Translation', 'Practice', 'Culture'],
+    followers: '1.3M',
+    category: 'Education',
+    suggestedQuestions: [
+      "What's the fastest way to learn a new language?",
+      "How can I improve my pronunciation?",
+      "What are good language learning apps?",
+      "How do I stay motivated when learning a language?"
+    ]
   },
   {
-    id: 'fantasy2',
-    name: 'Daenerys Targaryen',
-    description: 'The Mother of Dragons and rightful heir to the Iron Throne',
-    image: require('../assets/character/fantasy2.png'),
-    tags: ['Determined', 'Royal', 'Dragons', 'Conqueror'],
-    followers: '18.7M',
-    category: 'Fantasy'
-  },
-  {
-    id: 'fantasy3',
-    name: 'Harry Potter',
-    description: 'The Boy Who Lived and the Chosen One of the wizarding world',
-    image: require('../assets/character/fantasy3.png'),
-    tags: ['Brave', 'Wizard', 'Chosen One', 'Loyal'],
-    followers: '22.3M',
-    category: 'Fantasy'
-  },
-  {
-    id: 'fantasy4',
-    name: 'Aragorn',
-    description: 'The rightful King of Gondor and leader of the Rangers of the North',
-    image: require('../assets/character/fantasy4.png'),
-    tags: ['Ranger', 'King', 'Warrior', 'Noble'],
-    followers: '12.8M',
-    category: 'Fantasy'
-  },
-  {
-    id: 'fantasy5',
-    name: 'Galadriel',
-    description: 'The powerful Elven Queen with ancient wisdom and magical abilities',
-    image: require('../assets/character/fantasy5.png'),
-    tags: ['Elf', 'Queen', 'Magical', 'Ancient'],
-    followers: '9.4M',
-    category: 'Fantasy'
-  },
-  
-  // Historical Characters
-  {
-    id: 'historical1',
-    name: 'Cleopatra',
-    description: 'The last active ruler of the Ptolemaic Kingdom of Egypt',
-    image: require('../assets/character/historical1.png'),
-    tags: ['Queen', 'Ruler', 'Intelligent', 'Strategic'],
-    followers: '14.2M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical2',
-    name: 'Julius Caesar',
-    description: 'Roman general and statesman who played a critical role in the events that led to the demise of the Roman Republic',
-    image: require('../assets/character/historical2.png'),
-    tags: ['Emperor', 'Conqueror', 'Military', 'Leader'],
-    followers: '13.5M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical3',
-    name: 'Leonardo da Vinci',
-    description: 'Italian polymath whose areas of interest included invention, drawing, painting, sculpture, architecture, science, music, mathematics, engineering, and more',
-    image: require('../assets/character/historical3.png'),
-    tags: ['Genius', 'Artist', 'Inventor', 'Renaissance'],
-    followers: '16.7M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical4',
-    name: 'Marie Antoinette',
-    description: 'The last Queen of France before the French Revolution',
-    image: require('../assets/character/historical4.png'),
-    tags: ['Queen', 'French', 'Aristocrat', 'Tragic'],
-    followers: '10.3M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical5',
-    name: 'Genghis Khan',
-    description: 'Founder and first Great Khan and Emperor of the Mongol Empire',
-    image: require('../assets/character/historical5.png'),
-    tags: ['Conqueror', 'Emperor', 'Warrior', 'Ruler'],
-    followers: '11.9M',
-    category: 'Historical'
-  },
-  
-  // Professional Characters
-  {
-    id: 'professional1',
-    name: 'Dr. Sarah Chen',
-    description: 'Brilliant neurosurgeon who saves lives while battling her own personal demons',
-    image: require('../assets/character/professional1.png'),
-    tags: ['Doctor', 'Genius', 'Dedicated', 'Compassionate'],
-    followers: '8.6M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional2',
-    name: 'Prof. James Wilson',
-    description: 'Renowned psychology professor with unconventional teaching methods',
-    image: require('../assets/character/professional2.png'),
-    tags: ['Academic', 'Mentor', 'Eccentric', 'Brilliant'],
-    followers: '7.2M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional3',
-    name: 'Chef Antonio',
-    description: 'Passionate Italian chef with a flair for the dramatic and incredible culinary skills',
-    image: require('../assets/character/professional3.png'),
-    tags: ['Chef', 'Creative', 'Passionate', 'Temperamental'],
-    followers: '9.1M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional4',
-    name: 'Detective Morgan',
-    description: 'Hard-boiled detective with a perfect case record and troubled past',
-    image: require('../assets/character/professional4.png'),
-    tags: ['Detective', 'Sharp', 'Tenacious', 'Mysterious'],
-    followers: '10.5M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional5',
-    name: 'Astronaut Zhang',
-    description: 'Pioneering astronaut who has made incredible discoveries in deep space',
-    image: require('../assets/character/professional5.png'),
-    tags: ['Astronaut', 'Explorer', 'Brave', 'Scientific'],
-    followers: '12.3M',
-    category: 'Professional'
-  },
-  
-  // Fictional Characters
-  {
-    id: 'fictional1',
-    name: 'Sherlock Holmes',
-    description: 'The legendary detective with extraordinary powers of observation and deduction',
-    image: require('../assets/character/fictional1.png'),
-    tags: ['Detective', 'Genius', 'Observant', 'Eccentric'],
-    followers: '19.8M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional2',
-    name: 'Elizabeth Bennet',
-    description: 'The witty and independent protagonist from Pride and Prejudice',
-    image: require('../assets/character/fictional2.png'),
-    tags: ['Witty', 'Independent', 'Intelligent', 'Spirited'],
-    followers: '8.4M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional3',
-    name: 'Jay Gatsby',
-    description: 'The mysterious millionaire with a passionate obsession for his former love',
-    image: require('../assets/character/fictional3.png'),
-    tags: ['Wealthy', 'Mysterious', 'Romantic', 'Tragic'],
-    followers: '9.2M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional4',
-    name: 'Atticus Finch',
-    description: 'The moral hero of To Kill a Mockingbird, fighting for justice in the American South',
-    image: require('../assets/character/fictional4.png'),
-    tags: ['Lawyer', 'Honorable', 'Wise', 'Compassionate'],
-    followers: '7.5M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional5',
-    name: 'Captain Ahab',
-    description: 'The obsessed captain hunting the white whale that took his leg',
-    image: require('../assets/character/fictional5.png'),
-    tags: ['Captain', 'Obsessed', 'Vengeful', 'Determined'],
-    followers: '6.8M',
-    category: 'Fictional'
-  },
-  
-  // Anime Characters
-  {
-    id: 'anime1',
-    name: 'Spike Spiegel',
-    description: 'Former hitman turned bounty hunter with a cool attitude and dark past',
+    id: 'math',
+    name: 'Math',
+    description: 'Quickly solve math problems',
     image: require('../assets/character/anime1.png'),
-    tags: ['Bounty Hunter', 'Cool', 'Fighter', 'Mysterious'],
-    followers: '13.7M',
-    category: 'Anime'
+    tags: ['Calculations', 'Formulas', 'Equations'],
+    followers: '950K',
+    category: 'Education',
+    suggestedQuestions: [
+      "How do I solve quadratic equations?",
+      "What's the best way to learn calculus?",
+      "How can I improve my mental math skills?",
+      "What are some real-world applications of algebra?"
+    ]
   },
   {
-    id: 'anime2',
-    name: 'Sailor Moon',
-    description: 'Magical girl who transforms to fight for love and justice',
+    id: 'ai-learning',
+    name: 'AI Learning',
+    description: 'Study any subject with ease',
     image: require('../assets/character/anime2.png'),
-    tags: ['Magical Girl', 'Hero', 'Loving', 'Powerful'],
-    followers: '15.9M',
-    category: 'Anime'
+    tags: ['Tutoring', 'Knowledge', 'Study'],
+    followers: '1.7M',
+    category: 'Education',
+    suggestedQuestions: [
+      "How can AI help me learn more effectively?",
+      "What are the best AI learning tools?",
+      "How do I create a personalized learning plan with AI?",
+      "What subjects are best suited for AI-assisted learning?"
+    ]
   },
   {
-    id: 'anime3',
-    name: 'Goku',
-    description: 'Super-powered Saiyan warrior who constantly seeks greater strength',
+    id: 'school',
+    name: 'School',
+    description: 'Get help with homework',
     image: require('../assets/character/anime3.png'),
-    tags: ['Fighter', 'Powerful', 'Optimistic', 'Hero'],
-    followers: '24.6M',
-    category: 'Anime'
+    tags: ['Assignments', 'Projects', 'Research'],
+    followers: '1.2M',
+    category: 'Education',
+    suggestedQuestions: [
+      "How can I improve my study habits?",
+      "What's the best way to take notes?",
+      "How do I manage my homework workload?",
+      "What strategies help with test preparation?"
+    ]
   },
   {
-    id: 'anime4',
-    name: 'Levi Ackerman',
-    description: 'Humanity\'s strongest soldier with an intense focus on duty',
+    id: 'social-media',
+    name: 'Social Media',
+    description: 'Create content for social media',
     image: require('../assets/character/anime4.png'),
-    tags: ['Soldier', 'Strong', 'Serious', 'Skilled'],
-    followers: '19.2M',
-    category: 'Anime'
+    tags: ['Posts', 'Captions', 'Marketing'],
+    followers: '2.1M',
+    category: 'Marketing',
+    suggestedQuestions: [
+      "How can I grow my social media following?",
+      "What types of content perform best on Instagram?",
+      "How do I write engaging captions?",
+      "What's the best time to post on different platforms?"
+    ]
   },
   {
-    id: 'anime5',
-    name: 'Mikasa Ackerman',
-    description: 'Extremely skilled fighter with unwavering loyalty to those she loves',
+    id: 'quote-maker',
+    name: 'Quote Maker',
+    description: 'Find a quote for any occasion',
     image: require('../assets/character/anime5.png'),
-    tags: ['Soldier', 'Loyal', 'Skilled', 'Protective'],
-    followers: '17.8M',
-    category: 'Anime'
+    tags: ['Inspiration', 'Wisdom', 'Sayings'],
+    followers: '1.5M',
+    category: 'Creative',
+    suggestedQuestions: [
+      "What are some inspirational quotes about success?",
+      "Can you suggest motivational quotes for tough times?",
+      "What are famous quotes about love?",
+      "How can I create my own meaningful quotes?"
+    ]
   },
-  
-  // Celebrity Characters
   {
-    id: 'celebrity1',
-    name: 'Marilyn Monroe',
-    description: 'Iconic actress and model of the Golden Age of Hollywood',
+    id: 'ai-scanner',
+    name: 'AI Scanner',
+    description: 'Scan and extract text from docs',
     image: require('../assets/character/celebrity1.png'),
-    tags: ['Actress', 'Icon', 'Glamorous', 'Mysterious'],
-    followers: '20.3M',
-    category: 'Celebrity'
+    tags: ['OCR', 'Documents', 'Text'],
+    followers: '1.1M',
+    category: 'Productivity',
+    suggestedQuestions: [
+      "How accurate is the text extraction?",
+      "What file formats does the scanner support?",
+      "Can it recognize handwriting?",
+      "How does it handle poor quality documents?"
+    ]
   },
   {
-    id: 'celebrity2',
-    name: 'Elvis Presley',
-    description: 'The King of Rock and Roll who changed music forever',
+    id: 'translator',
+    name: 'Translator',
+    description: 'Break language barriers on the go',
     image: require('../assets/character/celebrity2.png'),
-    tags: ['Musician', 'Icon', 'King', 'Charismatic'],
-    followers: '18.5M',
-    category: 'Celebrity'
-  },
-  {
-    id: 'celebrity3',
-    name: 'Audrey Hepburn',
-    description: 'Elegant film and fashion icon known for her humanitarian work',
-    image: require('../assets/character/celebrity3.png'),
-    tags: ['Actress', 'Elegant', 'Icon', 'Humanitarian'],
-    followers: '16.2M',
-    category: 'Celebrity'
-  },
-  {
-    id: 'celebrity4',
-    name: 'Bruce Lee',
-    description: 'Legendary martial artist and actor who revolutionized action cinema',
-    image: require('../assets/character/celebrity4.png'),
-    tags: ['Martial Artist', 'Actor', 'Philosopher', 'Icon'],
-    followers: '21.7M',
-    category: 'Celebrity'
-  },
-  {
-    id: 'celebrity5',
-    name: 'Frida Kahlo',
-    description: 'Revolutionary Mexican artist known for her unique style and self-portraits',
-    image: require('../assets/character/celebrity5.png'),
-    tags: ['Artist', 'Iconic', 'Revolutionary', 'Passionate'],
-    followers: '14.9M',
-    category: 'Celebrity'
-  },
-  
-  // Scientist Characters
-  {
-    id: 'scientists1',
-    name: 'Albert Einstein',
-    description: 'Revolutionary physicist who developed the theory of relativity',
-    image: require('../assets/character/scientists1.png'),
-    tags: ['Genius', 'Physicist', 'Revolutionary', 'Eccentric'],
-    followers: '22.1M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists2',
-    name: 'Marie Curie',
-    description: 'Pioneering physicist and chemist who discovered radium and polonium',
-    image: require('../assets/character/scientists2.png'),
-    tags: ['Nobel Prize', 'Physicist', 'Chemist', 'Pioneer'],
-    followers: '17.3M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists3',
-    name: 'Isaac Newton',
-    description: 'Mathematician, physicist, and astronomer who formulated the laws of motion and gravity',
-    image: require('../assets/character/scientists3.png'),
-    tags: ['Genius', 'Mathematician', 'Physicist', 'Discoverer'],
-    followers: '15.8M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists4',
-    name: 'Nikola Tesla',
-    description: 'Brilliant inventor who pioneered electrical engineering',
-    image: require('../assets/character/scientists4.png'),
-    tags: ['Inventor', 'Genius', 'Visionary', 'Eccentric'],
-    followers: '19.5M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists5',
-    name: 'Ada Lovelace',
-    description: 'First computer programmer and visionary who foresaw the potential of computing machines',
-    image: require('../assets/character/scientists5.png'),
-    tags: ['Programmer', 'Visionary', 'Mathematician', 'Pioneer'],
-    followers: '13.6M',
-    category: 'Scientists'
-  },
+    tags: ['Languages', 'Communication', 'Global'],
+    followers: '1.8M',
+    category: 'Productivity',
+    suggestedQuestions: [
+      "How many languages does the translator support?",
+      "Can it translate spoken conversations in real-time?",
+      "How accurate are the translations?",
+      "Does it work offline for common languages?"
+    ]
+  }
 ];
 
 // Categories for the horizontal scroll
 const CATEGORIES = [
   { id: 'all', name: 'All', selected: true },
-  { id: 'original', name: 'Original', selected: false },
-  { id: 'fantasy', name: 'Fantasy', selected: false },
-  { id: 'historical', name: 'Historical', selected: false },
-  { id: 'professional', name: 'Professional', selected: false },
-  { id: 'fictional', name: 'Fictional', selected: false },
-  { id: 'anime', name: 'Anime', selected: false },
-  { id: 'celebrity', name: 'Celebrity', selected: false },
-  { id: 'scientists', name: 'Scientists', selected: false },
+  { id: 'life', name: 'Life', selected: false },
+  { id: 'health', name: 'Health', selected: false },
+  { id: 'work', name: 'Work', selected: false },
+  { id: 'creative', name: 'Creative', selected: false },
+  { id: 'education', name: 'Education', selected: false },
+  { id: 'marketing', name: 'Marketing', selected: false },
+  { id: 'productivity', name: 'Productivity', selected: false },
+  { id: 'entertainment', name: 'Entertainment', selected: false },
 ];
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { isDarkMode } = useContext(ThemeContext);
   const { isGuest, shouldShowDiscountOffer, markDiscountOfferShown, signOut } = useAuth();
-  const [categories, setCategories] = useState(CATEGORIES);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const searchInputRef = useRef(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [categories, setCategories] = useState<Category[]>(CATEGORIES);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const searchInputRef = useRef<TextInput>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   
   // Dynamic colors based on theme
   const colors = {
@@ -486,7 +369,7 @@ export default function HomeScreen({ navigation }) {
     buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
   };
 
-  const handleCategoryPress = (selectedId) => {
+  const handleCategoryPress = (selectedId: string) => {
     const updated = categories.map(cat => ({
       ...cat,
       selected: cat.id === selectedId
@@ -495,7 +378,7 @@ export default function HomeScreen({ navigation }) {
     setSelectedCategory(selectedId);
   };
 
-  const handleCharacterPress = async (character) => {
+  const handleToolPress = async (tool: Tool) => {
     if (isGuest) {
       // For guest users, check if we should show the discount offer
       try {
@@ -506,7 +389,17 @@ export default function HomeScreen({ navigation }) {
           // Mark that we've shown the offer today
           await markDiscountOfferShown();
           // Navigate to discount offer screen
-          navigation.navigate('DiscountOfferScreen', { fromCharacter: true, character });
+          navigation.navigate('DiscountOfferScreen', {
+            fromCharacter: true,
+            character: {
+              id: tool.id,
+              name: tool.name,
+              avatar: tool.image,
+              description: tool.description,
+              tags: tool.tags,
+              category: tool.category
+            }
+          });
           return;
         }
       } catch (error) {
@@ -514,8 +407,17 @@ export default function HomeScreen({ navigation }) {
       }
     }
     
-    // Otherwise proceed to chat
-    navigation.navigate('Chat', { character });
+    // Otherwise proceed to tool - map tool to character format
+    navigation.navigate('Chat', {
+      character: {
+        id: tool.id,
+        name: tool.name,
+        avatar: tool.image,
+        description: tool.description,
+        tags: tool.tags,
+        category: tool.category
+      }
+    });
   };
 
   const navigateToProfile = () => {
@@ -532,13 +434,13 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity 
+  const renderCategoryItem = ({ item }: { item: Category }) => (
+    <TouchableOpacity
       style={[
-        styles.categoryItem, 
+        styles.categoryItem,
         { backgroundColor: item.selected ? colors.categorySelected : colors.categoryBg },
         item.selected && styles.categoryItemSelected
-      ]} 
+      ]}
       onPress={() => handleCategoryPress(item.id)}
     >
       <Text 
@@ -553,43 +455,47 @@ export default function HomeScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  const renderTagItem = (tag) => (
-    <View key={tag} style={[styles.tagItem, { backgroundColor: colors.tagBg }]}>
+  const renderTagItem = (tag: string) => (
+    <View style={[styles.tagItem, { backgroundColor: colors.tagBg }]}>
       <Text style={[styles.tagText, { color: colors.tagText }]}>{tag}</Text>
     </View>
   );
 
-  const renderCharacterItem = ({ item }) => (
+  const renderToolItem = ({ item }: { item: Tool }) => (
     <TouchableOpacity
       style={[
-        styles.characterCard,
+        styles.toolCard,
         { width: COLUMN_WIDTH },
         isDarkMode ? styles.darkCard : styles.lightCard
       ]}
-      onPress={() => handleCharacterPress(item)}
+      onPress={() => handleToolPress(item)}
       activeOpacity={0.8}
     >
-      <View style={styles.characterImageContainer}>
-        <Image source={item.image} style={styles.characterImage} />
+      <View style={styles.toolImageContainer}>
+        <Image source={item.image} style={styles.toolImage} />
         <View style={[styles.categoryTag, { backgroundColor: colors.accent }]}>
           <Text style={[styles.categoryTagText, { color: '#FFFFFF' }]}>{item.category}</Text>
         </View>
       </View>
       
-      <View style={styles.characterInfo}>
-        <Text style={[styles.characterName, { color: colors.text }]} numberOfLines={1}>
+      <View style={styles.toolInfo}>
+        <Text style={[styles.toolName, { color: colors.text }]} numberOfLines={1}>
           {item.name}
         </Text>
         
-        <Text style={[styles.characterDescription, { color: colors.subText }]} numberOfLines={2}>
+        <Text style={[styles.toolDescription, { color: colors.subText }]} numberOfLines={2}>
           {item.description}
         </Text>
         
         <View style={styles.tagsContainer}>
-          {item.tags.slice(0, 3).map((tag) => renderTagItem(tag))}
+          {item.tags.slice(0, 3).map((tag, index) =>
+            <View key={`${item.id}-tag-${index}`}>
+              {renderTagItem(tag)}
+            </View>
+          )}
         </View>
         
-        <View style={styles.characterMeta}>
+        <View style={styles.toolMeta}>
           <View style={styles.followerCount}>
             <Ionicons name="people-outline" size={14} color={colors.subText} />
             <Text style={[styles.followerText, { color: colors.subText }]}>
@@ -599,9 +505,9 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity 
             style={[styles.chatButton, { backgroundColor: colors.accent }]} 
-            onPress={() => handleCharacterPress(item)}
+            onPress={() => handleToolPress(item)}
           >
-            <Text style={styles.chatButtonText}>Chat</Text>
+            <Text style={styles.chatButtonText}>Use</Text>
             <Ionicons name="chatbubble-outline" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
@@ -609,16 +515,16 @@ export default function HomeScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  const filteredCharacters = searchQuery 
-    ? CHARACTERS.filter(char => 
-        (selectedCategory === 'all' || char.category.toLowerCase() === selectedCategory.toLowerCase()) &&
-        (char.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        char.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        char.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
+  const filteredTools = searchQuery 
+    ? TOOLS.filter(tool => 
+        (selectedCategory === 'all' || tool.category.toLowerCase() === selectedCategory.toLowerCase()) &&
+        (tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        tool.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        tool.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
       )
     : selectedCategory === 'all' 
-      ? CHARACTERS 
-      : CHARACTERS.filter(char => char.category.toLowerCase() === selectedCategory.toLowerCase());
+      ? TOOLS 
+      : TOOLS.filter(tool => tool.category.toLowerCase() === selectedCategory.toLowerCase());
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -638,7 +544,7 @@ export default function HomeScreen({ navigation }) {
         <TextInput
           ref={searchInputRef}
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search characters..."
+          placeholder="Search tools..."
           placeholderTextColor={colors.subText}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -662,11 +568,11 @@ export default function HomeScreen({ navigation }) {
       </View>
       
       <FlatList
-        data={filteredCharacters}
-        renderItem={renderCharacterItem}
+        data={filteredTools}
+        renderItem={renderToolItem}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        contentContainerStyle={styles.charactersList}
+        contentContainerStyle={styles.toolsList}
         showsVerticalScrollIndicator={false}
         columnWrapperStyle={styles.columnWrapper}
       />
@@ -812,7 +718,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  charactersList: {
+  toolsList: {
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
@@ -820,7 +726,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 4,
   },
-  characterCard: {
+  toolCard: {
     marginBottom: 20,
     borderRadius: 24,
     overflow: 'hidden',
@@ -839,14 +745,14 @@ const styles = StyleSheet.create({
   lightCard: {
     backgroundColor: '#FFFFFF',
   },
-  characterImageContainer: {
+  toolImageContainer: {
     position: 'relative',
     height: 180,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: 'hidden',
   },
-  characterImage: {
+  toolImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
@@ -863,15 +769,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  characterInfo: {
+  toolInfo: {
     padding: 14,
   },
-  characterName: {
+  toolName: {
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 4,
   },
-  characterDescription: {
+  toolDescription: {
     fontSize: 13,
     marginBottom: 10,
     lineHeight: 18,
@@ -892,7 +798,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  characterMeta: {
+  toolMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -954,4 +860,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-}); 
+});

@@ -94,8 +94,8 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
 
   const handleClose = () => {
     if (fromCharacter && character) {
-      // Navigate directly to chat with the character
-      navigation.navigate('Chat', { character });
+      // Replace current screen with Chat screen
+      navigation.replace('Chat', { character });
     } else {
       navigation.goBack();
     }

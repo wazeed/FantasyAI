@@ -41,6 +41,7 @@ import { ThemeProvider, ThemeContext } from './contexts/ThemeContext';
 import SubscriptionScreen from './components/SubscriptionScreen';
 import SubscriptionOfferScreen from './components/SubscriptionOfferScreen';
 import DiscountOfferScreen from './components/DiscountOfferScreen';
+import ChatListScreen from './components/ChatListScreen'; // Import the new component
 import TermsAndConditionsScreen from './components/TermsAndConditionsScreen';
 import PrivacyPolicyScreen from './components/PrivacyPolicyScreen';
 
@@ -105,132 +106,6 @@ const DarkTheme = {
     notification: '#0070F3', // Accent blue
   },
 };
-
-// Define navigation prop type for ChatListScreen
-type ChatListScreenNavigationProp = BottomTabNavigationProp<MainTabsParamList, 'ChatTab'>;
-
-// Create a responsive ChatListScreen to list available characters
-function ChatListScreen({ navigation }: { navigation: ChatListScreenNavigationProp }) {
-  const { isDarkMode } = React.useContext(ThemeContext);
-  const theme = isDarkMode ? DarkTheme : LightTheme;
-  const { width } = useWindowDimensions();
-  
-  // Calculate dynamic sizes based on screen width
-  const trendingItemWidth = Math.min(140, width * 0.38);
-  const avatarSize = Math.min(70, width * 0.18);
-  
-  // Sample data for recent and trending characters
-  const recentChats = [
-    { id: 1, name: 'Sarah', lastMessage: 'How are you doing today?', avatar: require('./assets/char1.png'), time: '2m ago' },
-    { id: 2, name: 'David', lastMessage: 'Did you see the latest update?', avatar: require('./assets/char2.png'), time: '1h ago' },
-    { id: 3, name: 'Emma', lastMessage: 'Thanks for your help!', avatar: require('./assets/char3.png'), time: 'Yesterday' },
-  ];
-  
-  const trendingCharacters = [
-    { id: 4, name: 'Coach Mike', description: 'Fitness & Motivation', avatar: require('./assets/char1.png') },
-    { id: 5, name: 'Dr. Lisa', description: 'Health & Wellness', avatar: require('./assets/char2.png') },
-    { id: 6, name: 'Chef Antonio', description: 'Cooking & Recipes', avatar: require('./assets/char3.png') },
-    { id: 7, name: 'Tutor Max', description: 'Learning & Education', avatar: require('./assets/char1.png') },
-    { id: 8, name: 'Artist Maya', description: 'Art & Creativity', avatar: require('./assets/char2.png') },
-    { id: 9, name: 'Coder Sam', description: 'Programming', avatar: require('./assets/char3.png') },
-  ];
-
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScrollView 
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 20 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ padding: width * 0.04 }}>
-          {/* Trending Characters - Horizontal Scrolling */}
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Trending Characters</Text>
-          
-          <ScrollView 
-            horizontal={true} 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={[styles.trendingScrollContainer, { paddingHorizontal: width * 0.02 }]}
-            decelerationRate="fast"
-            snapToInterval={trendingItemWidth + width * 0.04}
-            snapToAlignment="start"
-          >
-            {trendingCharacters.map((character) => (
-              <TouchableOpacity
-                key={character.id}
-                style={[
-                  styles.trendingItemHorizontal, 
-                  { 
-                    backgroundColor: theme.colors.card, 
-                    borderColor: theme.colors.border,
-                    width: trendingItemWidth,
-                    marginRight: width * 0.04
-                  }
-                ]}
-                // Use getParent() to access the Stack navigator and navigate to Chat
-                onPress={() => navigation.getParent()?.navigate('Chat', { character })}
-              >
-                <Image
-                  source={character.avatar} 
-                  style={[
-                    styles.trendingAvatar, 
-                    { 
-                      width: avatarSize, 
-                      height: avatarSize, 
-                      borderRadius: avatarSize / 2 
-                    }
-                  ]} 
-                />
-                <Text 
-                  style={[styles.trendingName, { color: theme.colors.text }]} 
-                  numberOfLines={1}
-                >
-                  {character.name}
-                </Text>
-                <Text 
-                  style={[styles.trendingDesc, { color: isDarkMode ? '#AAAAAA' : '#666666' }]} 
-                  numberOfLines={2}
-                >
-                  {character.description}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          
-          {/* Recent Chats - Vertical Scrolling */}
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 24 }]}>Recent Chats</Text>
-          
-          {recentChats.map((chat) => (
-            <TouchableOpacity
-              key={chat.id}
-              style={[
-                styles.chatItem, 
-                { 
-                  backgroundColor: theme.colors.card, 
-                  borderColor: theme.colors.border,
-                  marginBottom: width * 0.03
-                }
-              ]}
-              // Use getParent() to access the Stack navigator and navigate to Chat
-              onPress={() => navigation.getParent()?.navigate('Chat', { character: chat })}
-            >
-              <Image source={chat.avatar} style={styles.avatar} />
-              <View style={styles.chatInfo}>
-                <Text style={[styles.chatName, { color: theme.colors.text }]}>{chat.name}</Text>
-                <Text 
-                  style={[styles.chatMessage, { color: isDarkMode ? '#AAAAAA' : '#666666' }]} 
-                  numberOfLines={1}
-                >
-                  {chat.lastMessage}
-                </Text>
-              </View>
-              <Text style={[styles.chatTime, { color: isDarkMode ? '#888888' : '#999999' }]}>{chat.time}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
 
 // Bottom Tab Navigator
 function MainTabNavigator() {
@@ -342,19 +217,19 @@ const Navigation = () => {
   
   useEffect(() => {
     if (!loading) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(e => console.log('SplashScreen hide error:', e));
     }
   }, [loading]);
 
+  const theme = React.useMemo(() => isDarkMode ? DarkTheme : LightTheme, [isDarkMode]);
+
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: isDarkMode ? '#121212' : '#FFFFFF' }]}>
-        <ActivityIndicator size="large" color={isDarkMode ? '#FFFFFF' : '#000000'} />
+      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.text} />
       </View>
     );
   }
-
-  const theme = isDarkMode ? DarkTheme : LightTheme;
 
   const commonHeaderStyle = {
     headerStyle: {
