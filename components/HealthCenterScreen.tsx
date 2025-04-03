@@ -11,6 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { ThemeContext } from '../contexts/ThemeContext';
+// import { logError } from '../services/loggingService'; // Assuming a logging service exists
+const logError = (message: string, error?: any) => console.error(message, error); // Placeholder
 
 // Health resources data
 const HEALTH_RESOURCES = [
@@ -61,7 +63,24 @@ const HEALTHY_TIPS = [
   'Practice critical thinking in all interactions',
 ];
 
-const ResourceCard = ({ resource, isDarkMode, onPress }) => {
+// --- Types ---
+interface HealthResource {
+  id: string;
+  title: string;
+  description: string;
+  link: string;
+  icon: string;
+}
+
+interface ResourceCardProps {
+  resource: HealthResource;
+  isDarkMode: boolean;
+  onPress: (resource: HealthResource) => void;
+}
+
+// --- Subcomponents ---
+
+const ResourceCard: React.FC<ResourceCardProps> = ({ resource, isDarkMode, onPress }) => {
   return (
     <TouchableOpacity 
       style={[
@@ -71,7 +90,7 @@ const ResourceCard = ({ resource, isDarkMode, onPress }) => {
           borderColor: isDarkMode ? '#333333' : '#E0E0E0',
         }
       ]}
-      onPress={onPress}
+      onPress={() => onPress(resource)} // Pass resource back
       activeOpacity={0.7}
     >
       <View style={styles.resourceIconContainer}>
@@ -99,93 +118,44 @@ const ResourceCard = ({ resource, isDarkMode, onPress }) => {
   );
 };
 
-const ContactCard = ({ contact, isDarkMode, onPress }) => {
-  return (
-    <TouchableOpacity 
-      style={[
-        styles.contactCard,
-        { 
-          backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF',
-          borderColor: isDarkMode ? '#333333' : '#E0E0E0',
-        }
-      ]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={[
-        styles.contactIconContainer,
-        { backgroundColor: isDarkMode ? '#333333' : '#F0F0F0' }
-      ]}>
-        <Text style={styles.contactIcon}>{contact.isTextLine ? '✉️' : '📞'}</Text>
-      </View>
-      <View style={styles.contactContent}>
-        <Text style={[
-          styles.contactName,
-          { color: isDarkMode ? '#FFFFFF' : '#000000' }
-        ]}>
-          {contact.name}
-        </Text>
-        <Text style={[
-          styles.contactDescription,
-          { color: isDarkMode ? '#AAAAAA' : '#666666' }
-        ]}>
-          {contact.description}
-        </Text>
-        <Text style={[
-          styles.contactPhone,
-          { color: isDarkMode ? '#0070F3' : '#0070F3' }
-        ]}>
-          {contact.phone}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+// ContactCard component removed as it was unused.
+
+// --- Helper Functions ---
+
+const openLink = (url: string) => {
+  Linking.openURL(url).catch((err) => {
+    logError('Failed to open URL:', err);
+  });
 };
 
-export default function HealthCenterScreen() {
+// --- Theme Colors (defined outside component) ---
+const getThemeColors = (isDarkMode: boolean) => ({
+  background: isDarkMode ? '#121212' : '#FFFFFF',
+  text: isDarkMode ? '#FFFFFF' : '#000000',
+  subText: isDarkMode ? '#AAAAAA' : '#666666',
+  card: isDarkMode ? '#1E1E1E' : '#F5F5F5',
+  cardBorder: isDarkMode ? '#333333' : '#E0E0E0',
+  accent: isDarkMode ? '#00C4B4' : '#008577', // Consider a more accessible accent if needed
+  link: '#3D8CFF', // Standard link blue
+});
+
+// --- Main Component ---
+
+function HealthCenterScreenComponent() {
   const { isDarkMode } = React.useContext(ThemeContext);
 
-  const handleResourcePress = (resource) => {
-    // In a real app, this would open the resource link
-    Linking.openURL(resource.link).catch((err) => {
-      console.error('Failed to open URL:', err);
-    });
+  const handleResourcePress = (resource: HealthResource) => {
+    openLink(resource.link);
   };
 
-  const handleContactPress = (contact) => {
-    // In a real app, this would open the phone dialer or messaging app
-    const prefix = contact.isTextLine ? 'sms:' : 'tel:';
-    Linking.openURL(`${prefix}${contact.phone}`).catch((err) => {
-      console.error('Failed to open URL:', err);
-    });
-  };
+  // handleContactPress removed as ContactCard is unused.
 
   // Dynamic colors based on theme
-  const colors = {
-    background: isDarkMode ? '#121212' : '#FFFFFF',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    subText: isDarkMode ? '#AAAAAA' : '#666666',
-    card: isDarkMode ? '#1E1E1E' : '#F5F5F5',
-    cardBorder: isDarkMode ? '#333333' : '#E0E0E0',
-    accent: isDarkMode ? '#00C4B4' : '#008577',
-    link: '#3D8CFF',
-  };
+  const colors = getThemeColors(isDarkMode);
 
-  const renderResourceCard = (resource) => (
-    <ResourceCard 
-      key={resource.id}
-      resource={resource}
-      isDarkMode={isDarkMode}
-      onPress={() => handleResourcePress(resource)}
-    />
-  );
+  // Moved render functions inside component scope or defined as separate components if complex
 
-  const renderTip = (tip, index) => (
-    <View key={index} style={[styles.tipItem, { borderColor: colors.cardBorder }]}>
-      <Text style={[styles.tipNumber, { backgroundColor: colors.accent }]}>{index + 1}</Text>
-      <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
-    </View>
-  );
+  // Moved render functions inside component scope or defined as separate components if complex
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -213,7 +183,14 @@ export default function HealthCenterScreen() {
           </Text>
           
           <View style={styles.resourcesContainer}>
-            {HEALTH_RESOURCES.map(renderResourceCard)}
+            {HEALTH_RESOURCES.map((resource) => (
+              <ResourceCard
+                key={resource.id}
+                resource={resource}
+                isDarkMode={isDarkMode}
+                onPress={handleResourcePress} // Pass the handler directly
+              />
+            ))}
           </View>
         </View>
 
@@ -224,7 +201,15 @@ export default function HealthCenterScreen() {
           </Text>
           
           <View style={styles.tipsContainer}>
-            {HEALTHY_TIPS.map(renderTip)}
+            {HEALTHY_TIPS.map((tip, index) => (
+              <View key={index} style={[styles.tipItem, { borderColor: colors.cardBorder }]}>
+                {/* Use View for number background for better alignment */}
+                <View style={[styles.tipNumberContainer, { backgroundColor: colors.accent }]}>
+                  <Text style={styles.tipNumberText}>{index + 1}</Text>
+                </View>
+                <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
@@ -236,7 +221,7 @@ export default function HealthCenterScreen() {
           </Text>
           <TouchableOpacity 
             style={[styles.supportButton, { backgroundColor: colors.accent }]}
-            onPress={() => handleResourcePress('https://988lifeline.org')}  
+            onPress={() => openLink('https://988lifeline.org')} // Use helper function
           >
             <Text style={styles.supportButtonText}>Get Support</Text>
           </TouchableOpacity>
@@ -245,6 +230,8 @@ export default function HealthCenterScreen() {
     </SafeAreaView>
   );
 }
+
+// --- Styles ---
 
 const styles = StyleSheet.create({
   container: {
@@ -340,13 +327,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  tipNumber: {
+  tipNumberContainer: { // Renamed for clarity
     width: 28,
     height: 28,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  tipNumberText: { // Style for the text itself
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   tipText: {
     flex: 1,
@@ -382,48 +374,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  contactCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
-  },
-  contactIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  contactIcon: {
-    fontSize: 20,
-  },
-  contactContent: {
-    
-  },
-  contactName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  contactDescription: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  contactPhone: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-}); 
+  // ContactCard styles removed as the component is unused.
+});
+
+// --- Exports ---
+export { HealthCenterScreenComponent as HealthCenterScreen }; // Named export
+export default HealthCenterScreenComponent; // Default export

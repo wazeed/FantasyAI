@@ -20,9 +20,30 @@ import { useOnboarding } from '../contexts/OnboardingContext';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Import navigation type
 
-// Interest categories for the first screen
-const interestCategories = [
+// Placeholder for navigation types - should be defined centrally
+type RootStackParamList = {
+  [key: string]: any; // Allow other routes
+};
+
+// --- Constants ---
+const MIN_INTERESTS = 3;
+const FREE_CREDITS_AMOUNT = 30;
+const ANIMATION_DURATION_SHORT = 250;
+const ANIMATION_DURATION_MEDIUM = 500;
+const ANIMATION_DURATION_LONG = 1500;
+const GIFT_ANIMATION_DURATION = 1000;
+
+// --- Types ---
+interface InterestCategory {
+  id: number;
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap; // Use keyof for type safety
+}
+
+// --- Static Data (moved outside component) ---
+const interestCategories: InterestCategory[] = [
   { id: 1, title: 'Roleplaying', icon: 'game-controller-outline' },
   { id: 2, title: 'Adventure', icon: 'compass-outline' },
   { id: 3, title: 'Anime', icon: 'apps-outline' },
@@ -36,13 +57,49 @@ const interestCategories = [
   { id: 11, title: 'Sci-Fi', icon: 'rocket-outline' },
 ];
 
-// Lifestyle categories
-const lifestyleCategories = [
+const lifestyleCategories: InterestCategory[] = [
   { id: 12, title: 'Friendship', icon: 'people-outline' },
   { id: 13, title: 'Emotional Wellness', icon: 'pulse-outline' },
 ];
 
-const OnboardingScreen: React.FC = () => {
+// --- Theme Helper ---
+const getThemeColors = (isDarkMode: boolean) => ({
+  backgroundGradient: isDarkMode
+    ? ['#121212', '#1A1A1A', '#222222'] as const
+    : ['#FFFFFF', '#F8FAFF', '#F0F4FF'] as const,
+  cardGradient: isDarkMode
+    ? ['#1E1E1E', '#252525'] as const
+    : ['#F8F8F8', '#FFFFFF'] as const,
+  text: isDarkMode ? '#FFFFFF' : '#000000',
+  subtitle: isDarkMode ? '#BBBBBB' : '#666666',
+  interestItemBg: isDarkMode ? '#1E1E1E' : '#F8F8F8',
+  interestItemBorder: isDarkMode ? '#333333' : '#EEEEEE',
+  interestIconBg: isDarkMode ? ['#2A2A2A', '#333333'] as const : ['#F0F0F0', '#FAFAFA'] as const,
+  interestIconColor: isDarkMode ? '#FFFFFF' : '#555555',
+  selectedInterestBorder: '#0070F3',
+  selectedInterestText: '#0070F3',
+  selectedIconBg: ['#0070F3', '#0063DA'] as const,
+  selectedIconColor: '#FFFFFF',
+  buttonGradient: ['#0070F3', '#0063DA'] as const,
+  buttonText: '#FFFFFF',
+  disabledButtonOpacity: 0.5,
+  guestButtonBorder: isDarkMode ? '#444444' : '#DDDDDD',
+  guestButtonBg: isDarkMode ? 'rgba(30, 30, 30, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+  guestButtonText: isDarkMode ? '#BBBBBB' : '#555555',
+  starColor: '#FFD700',
+  starOutlineColor: isDarkMode ? '#FFFFFF' : '#000000',
+  creditBadgeBg: ['#162B47', '#1D3759'] as const,
+  creditCounterBg: isDarkMode ? ['#1A1D21', '#252A33'] as const : ['#F0F4FF', '#E6EDFF'] as const,
+  creditFeaturesBg: isDarkMode ? ['rgba(30, 30, 30, 0.7)', 'rgba(35, 35, 35, 0.7)'] as const : ['rgba(248, 250, 252, 0.8)', 'rgba(240, 245, 255, 0.8)'] as const,
+  checkmarkColor: '#4CAF50',
+  completionCircleBg: '#4CAF50',
+});
+
+// --- Main Component ---
+
+const OnboardingScreenComponent: React.FC = () => {
+
+// Removed duplicate declaration
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedInterests, setSelectedInterests] = useState<number[]>([]);
   const [rating, setRating] = useState(0);
@@ -50,7 +107,7 @@ const OnboardingScreen: React.FC = () => {
   const { completeOnboarding, resetOnboarding } = useOnboarding();
   const { isDarkMode } = React.useContext(ThemeContext);
   const { skipAuth } = useAuth();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -70,18 +127,18 @@ const OnboardingScreen: React.FC = () => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 500,
+        duration: ANIMATION_DURATION_MEDIUM,
         useNativeDriver: true,
       }),
       Animated.timing(scaleAnim, {
         toValue: 1,
-        duration: 550,
+        duration: ANIMATION_DURATION_MEDIUM + 50, // Slightly longer for effect
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 500,
+        duration: ANIMATION_DURATION_MEDIUM,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       })
@@ -91,7 +148,7 @@ const OnboardingScreen: React.FC = () => {
     if (currentStep === 2) {
       Animated.timing(creditCountAnim, {
         toValue: 30,
-        duration: 1500,
+        duration: ANIMATION_DURATION_LONG,
         easing: Easing.out(Easing.ease),
         useNativeDriver: false,
       }).start();
@@ -103,12 +160,12 @@ const OnboardingScreen: React.FC = () => {
         Animated.sequence([
           Animated.timing(giftAnim, {
             toValue: 1,
-            duration: 1000,
+            duration: GIFT_ANIMATION_DURATION,
             useNativeDriver: true,
           }),
           Animated.timing(giftAnim, {
             toValue: 0,
-            duration: 1000,
+            duration: GIFT_ANIMATION_DURATION,
             useNativeDriver: true,
           }),
         ])
@@ -139,7 +196,7 @@ const OnboardingScreen: React.FC = () => {
   };
 
   // Check if at least 3 interests are selected
-  const canProceed = selectedInterests.length >= 3 || currentStep > 0;
+  const canProceedFromInterests = selectedInterests.length >= MIN_INTERESTS;
 
   // Next step handler
   const handleNext = () => {
@@ -148,12 +205,12 @@ const OnboardingScreen: React.FC = () => {
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 250,
+          duration: ANIMATION_DURATION_SHORT,
           useNativeDriver: true,
         }),
         Animated.timing(scaleAnim, {
           toValue: 0.95,
-          duration: 250,
+          duration: ANIMATION_DURATION_SHORT,
           useNativeDriver: true,
         }),
       ]).start(() => {
@@ -171,12 +228,12 @@ const OnboardingScreen: React.FC = () => {
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 250,
+          duration: ANIMATION_DURATION_SHORT,
           useNativeDriver: true,
         }),
         Animated.timing(scaleAnim, {
           toValue: 0.95,
-          duration: 250,
+          duration: ANIMATION_DURATION_SHORT,
           useNativeDriver: true,
         }),
       ]).start(() => {
@@ -194,554 +251,80 @@ const OnboardingScreen: React.FC = () => {
   // For development: reset onboarding on each app launch
   useEffect(() => {
     // Uncomment the line below to reset onboarding every time the component mounts
-    // resetOnboarding();
+    // if (__DEV__) { resetOnboarding(); } // Optionally reset only in dev
   }, []);
 
-  // Get background and card colors based on theme
-  const getBackgroundGradient = () => {
-    if (isDarkMode) {
-      return ['#121212', '#1A1A1A', '#222222'] as const;
-    } else {
-      return ['#FFFFFF', '#F8FAFF', '#F0F4FF'] as const;
-    }
-  };
+  // Theme colors derived using helper
+  const colors = React.useMemo(() => getThemeColors(isDarkMode), [isDarkMode]);
 
-  const getCardGradient = () => {
-    if (isDarkMode) {
-      return ['#1E1E1E', '#252525'] as const;
-    } else {
-      return ['#F8F8F8', '#FFFFFF'] as const;
-    }
-  };
+  // --- Render Logic ---
 
-  // Renders the interests selection step
-  const renderInterestsStep = () => {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
-        <LinearGradient
-          colors={getBackgroundGradient()}
-          style={styles.gradientBackground}
-        >
-          <Animated.View 
-            style={[
-              styles.contentContainer,
-              { 
-                opacity: fadeAnim, 
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: slideAnim }
-                ] 
-              }
-            ]}
-          >
-            <View style={styles.headingContainer}>
-              <Text style={[styles.title, isDarkMode ? styles.darkText : styles.lightText]}>
-                What are your interests?
-              </Text>
-              
-              <Text style={[styles.subtitle, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-                Pick three or more to personalize your experience
-              </Text>
-            </View>
-            
-            <ScrollView 
-              style={styles.scrollContainer}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.categoriesContainer}>
-                <Text style={[styles.categoryTitle, isDarkMode ? styles.darkText : styles.lightText]}>
-                  Roleplaying
-                </Text>
-                
-                <View style={styles.interestsGrid}>
-                  {interestCategories.slice(0, 11).map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[
-                        styles.interestItem,
-                        selectedInterests.includes(item.id) && styles.selectedInterest,
-                        isDarkMode ? styles.darkInterestItem : styles.lightInterestItem
-                      ]}
-                      onPress={() => toggleInterest(item.id)}
-                      activeOpacity={0.7}
-                    >
-                      <LinearGradient
-                        colors={selectedInterests.includes(item.id) 
-                          ? ['#0070F3', '#0063DA'] 
-                          : isDarkMode ? ['#2A2A2A', '#333333'] : ['#F0F0F0', '#FAFAFA']}
-                        style={[
-                          styles.iconContainer,
-                          selectedInterests.includes(item.id) && styles.selectedIconContainer
-                        ]}
-                      >
-                        <Ionicons 
-                          name={item.icon as any} 
-                          size={22} 
-                          color={selectedInterests.includes(item.id) 
-                            ? '#FFFFFF' 
-                            : isDarkMode ? '#FFFFFF' : '#555555'} 
-                        />
-                      </LinearGradient>
-                      <Text 
-                        style={[
-                          styles.interestText, 
-                          isDarkMode ? styles.darkText : styles.lightText,
-                          selectedInterests.includes(item.id) && styles.selectedInterestText
-                        ]}
-                      >
-                        {item.title}
-                      </Text>
-                      {selectedInterests.includes(item.id) && (
-                        <View style={styles.checkmarkContainer}>
-                          <Ionicons name="checkmark-circle" size={20} color="#0070F3" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                
-                <Text style={[styles.categoryTitle, isDarkMode ? styles.darkText : styles.lightText, { marginTop: 30 }]}>
-                  Lifestyle
-                </Text>
-                
-                <View style={styles.interestsGrid}>
-                  {lifestyleCategories.map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[
-                        styles.interestItem,
-                        selectedInterests.includes(item.id) && styles.selectedInterest,
-                        isDarkMode ? styles.darkInterestItem : styles.lightInterestItem
-                      ]}
-                      onPress={() => toggleInterest(item.id)}
-                      activeOpacity={0.7}
-                    >
-                      <LinearGradient
-                        colors={selectedInterests.includes(item.id) 
-                          ? ['#0070F3', '#0063DA'] 
-                          : isDarkMode ? ['#2A2A2A', '#333333'] : ['#F0F0F0', '#FAFAFA']}
-                        style={[
-                          styles.iconContainer,
-                          selectedInterests.includes(item.id) && styles.selectedIconContainer
-                        ]}
-                      >
-                        <Ionicons 
-                          name={item.icon as any} 
-                          size={22} 
-                          color={selectedInterests.includes(item.id) 
-                            ? '#FFFFFF' 
-                            : isDarkMode ? '#FFFFFF' : '#555555'} 
-                        />
-                      </LinearGradient>
-                      <Text 
-                        style={[
-                          styles.interestText, 
-                          isDarkMode ? styles.darkText : styles.lightText,
-                          selectedInterests.includes(item.id) && styles.selectedInterestText
-                        ]}
-                      >
-                        {item.title}
-                      </Text>
-                      {selectedInterests.includes(item.id) && (
-                        <View style={styles.checkmarkContainer}>
-                          <Ionicons name="checkmark-circle" size={20} color="#0070F3" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </ScrollView>
-          </Animated.View>
-          
-          <View style={styles.bottomContainer}>
-            <Text style={[styles.selectionCount, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-              {selectedInterests.length} of 3 minimum selected
-            </Text>
-            
-            <TouchableOpacity
-              style={[
-                styles.nextButton,
-                !canProceed && styles.disabledButton
-              ]}
-              onPress={handleNext}
-              disabled={!canProceed}
-            >
-              <LinearGradient
-                colors={['#0070F3', '#0063DA']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientButton}
-              >
-                <Text style={styles.nextButtonText}>
-                  Continue
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-      </SafeAreaView>
-    );
-  };
+  const renderCurrentStep = () => { // Renamed for clarity
+    const stepProps = {
+      isDarkMode,
+      colors,
+      fadeAnim,
+      scaleAnim,
+      slideAnim,
+      handleNext,
+    };
 
-  // Renders the welcome gift step
-  const renderWelcomeGiftStep = () => {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
-        <LinearGradient
-          colors={getBackgroundGradient()}
-          style={styles.gradientBackground}
-        >
-          <Animated.View 
-            style={[
-              styles.giftContainer,
-              { 
-                opacity: fadeAnim, 
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: slideAnim }
-                ] 
-              }
-            ]}
-          >
-            <Text style={[styles.title, isDarkMode ? styles.darkText : styles.lightText]}>
-              You have a Welcome Surprise!
-            </Text>
-            
-            <Text style={[styles.giftDescription, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-              Tap to unveil your special gift and kickstart your fantasy adventure!
-            </Text>
-            
-            <Animated.View 
-              style={[
-                styles.giftBox, 
-                { 
-                  transform: [
-                    { translateY: giftAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, -20]
-                    })}
-                  ] 
-                }
-              ]}
-            >
-              <View style={styles.giftBoxTop}>
-                <View style={styles.giftBoxRibbon} />
-              </View>
-              <View style={styles.giftBoxBottom} />
-              
-              <Animated.View 
-                style={[
-                  styles.giftGlow,
-                  {
-                    opacity: giftAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.3, 0.8]
-                    })
-                  }
-                ]}
-              />
-            </Animated.View>
-            
-            <TouchableOpacity
-              style={styles.nextButton}
-              onPress={handleNext}
-            >
-              <LinearGradient
-                colors={['#0070F3', '#0063DA']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientButton}
-              >
-                <Text style={styles.nextButtonText}>
-                  Continue
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        </LinearGradient>
-      </SafeAreaView>
-    );
-  };
-
-  // Renders the free credits step
-  const renderFreeCreditsStep = () => {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
-        <LinearGradient
-          colors={getBackgroundGradient()}
-          style={styles.gradientBackground}
-        >
-          <Animated.View 
-            style={[
-              styles.giftContainer,
-              { 
-                opacity: fadeAnim, 
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: slideAnim }
-                ] 
-              }
-            ]}
-          >
-            <LinearGradient
-              colors={['#162B47', '#1D3759']}
-              style={styles.creditBadge}
-            >
-              <Ionicons name="star" size={32} color="#FFD700" />
-            </LinearGradient>
-            
-            <Text style={[styles.title, isDarkMode ? styles.darkText : styles.lightText]}>
-              Enjoy Free Credits!
-            </Text>
-            
-            <Text style={[styles.giftDescription, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-              We've added credits to your account. Use them to create and message with characters.
-            </Text>
-            
-            <View style={styles.creditCounter}>
-              <LinearGradient
-                colors={isDarkMode ? ['#1A1D21', '#252A33'] : ['#F0F4FF', '#E6EDFF']}
-                style={styles.creditCounterBg}
-              >
-                <Animated.Text 
-                  style={[
-                    styles.creditCountText, 
-                    isDarkMode ? styles.darkText : styles.lightText
-                  ]}
-                >
-                  {creditCount}
-                </Animated.Text>
-                <Text style={[styles.creditLabel, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-                  Free Credits
-                </Text>
-              </LinearGradient>
-            </View>
-            
-            <LinearGradient
-              colors={isDarkMode ? ['rgba(30, 30, 30, 0.7)', 'rgba(35, 35, 35, 0.7)'] : ['rgba(248, 250, 252, 0.8)', 'rgba(240, 245, 255, 0.8)']}
-              style={styles.creditFeatures}
-            >
-              <View style={styles.creditFeatureItem}>
-                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                <Text style={[styles.creditFeatureText, isDarkMode ? styles.darkText : styles.lightText]}>
-                  Create new characters
-                </Text>
-              </View>
-              <View style={styles.creditFeatureItem}>
-                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                <Text style={[styles.creditFeatureText, isDarkMode ? styles.darkText : styles.lightText]}>
-                  Engage in deep conversations
-                </Text>
-              </View>
-              <View style={styles.creditFeatureItem}>
-                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                <Text style={[styles.creditFeatureText, isDarkMode ? styles.darkText : styles.lightText]}>
-                  Unlock personality traits
-                </Text>
-              </View>
-            </LinearGradient>
-            
-            <TouchableOpacity
-              style={styles.nextButton}
-              onPress={handleNext}
-            >
-              <LinearGradient
-                colors={['#0070F3', '#0063DA']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientButton}
-              >
-                <Text style={styles.nextButtonText}>
-                  Continue
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        </LinearGradient>
-      </SafeAreaView>
-    );
-  };
-
-  // Renders the rating request step
-  const renderRatingStep = () => {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
-        <LinearGradient
-          colors={getBackgroundGradient()}
-          style={styles.gradientBackground}
-        >
-          <Animated.View 
-            style={[
-              styles.giftContainer,
-              { 
-                opacity: fadeAnim, 
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: slideAnim }
-                ] 
-              }
-            ]}
-          >
-            <Text style={[styles.title, isDarkMode ? styles.darkText : styles.lightText]}>
-              Quick Favor?
-            </Text>
-            
-            <Text style={[styles.giftDescription, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-              Would you rate us on the App Store? It's crucial for our discoverability and your rating will greatly help us. Thank you!
-            </Text>
-            
-            <LinearGradient
-              colors={isDarkMode ? ['rgba(30, 30, 30, 0.7)', 'rgba(35, 35, 35, 0.7)'] : ['rgba(248, 250, 252, 0.8)', 'rgba(240, 245, 255, 0.8)']}
-              style={styles.ratingContainer}
-            >
-              {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity
-                  key={star}
-                  onPress={() => setRating(star)}
-                  style={styles.starButton}
-                >
-                  <Ionicons
-                    name={rating >= star ? 'star' : 'star-outline'}
-                    size={38}
-                    color={rating >= star ? '#FFD700' : isDarkMode ? '#FFFFFF' : '#000000'}
-                    style={styles.starIcon}
-                  />
-                </TouchableOpacity>
-              ))}
-            </LinearGradient>
-            
-            <TouchableOpacity
-              style={styles.nextButton}
-              onPress={handleNext}
-            >
-              <LinearGradient
-                colors={['#0070F3', '#0063DA']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientButton}
-              >
-                <Text style={styles.nextButtonText}>
-                  Continue
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        </LinearGradient>
-      </SafeAreaView>
-    );
-  };
-
-  // Renders the final completion step
-  const renderCompletionStep = () => {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
-        <LinearGradient
-          colors={getBackgroundGradient()}
-          style={styles.gradientBackground}
-        >
-          <Animated.View 
-            style={[
-              styles.giftContainer,
-              { 
-                opacity: fadeAnim, 
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: slideAnim }
-                ] 
-              }
-            ]}
-          >
-            <Animated.View 
-              style={[
-                styles.completionCircle,
-                { 
-                  transform: [
-                    { scale: fadeAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.5, 1]
-                      })
-                    }
-                  ] 
-                }
-              ]}
-            >
-              <Ionicons
-                name="checkmark"
-                size={80}
-                color="#FFFFFF"
-              />
-            </Animated.View>
-            
-            <Text style={[styles.title, isDarkMode ? styles.darkText : styles.lightText]}>
-              All Set!
-            </Text>
-            
-            <Text style={[styles.giftDescription, isDarkMode ? styles.darkSubtitle : styles.lightSubtitle]}>
-              Your fantasy adventure begins now. Start chatting with characters that match your interests!
-            </Text>
-            
-            <TouchableOpacity
-              style={styles.nextButton}
-              onPress={completeOnboarding}
-            >
-              <LinearGradient
-                colors={['#0070F3', '#0063DA']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientButton}
-              >
-                <Text style={styles.nextButtonText}>
-                  Get Started
-                </Text>
-                <Ionicons name="rocket-outline" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
-              </LinearGradient>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.guestButton, isDarkMode ? styles.darkGuestButton : styles.lightGuestButton]}
-              onPress={handleContinueAsGuest}
-            >
-              <Text style={[styles.guestButtonText, isDarkMode ? styles.darkGuestText : styles.lightGuestText]}>
-                Continue as Guest
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </LinearGradient>
-      </SafeAreaView>
-    );
-  };
-
-  // Determines which step to render
-  const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return renderInterestsStep();
+        return (
+          <InterestsStep
+            {...stepProps}
+            selectedInterests={selectedInterests}
+            toggleInterest={toggleInterest}
+            canProceed={canProceedFromInterests}
+          />
+        );
       case 1:
-        return renderWelcomeGiftStep();
+        return (
+          <WelcomeGiftStep
+            {...stepProps}
+            giftAnim={giftAnim}
+          />
+        );
       case 2:
-        return renderFreeCreditsStep();
+        return (
+          <FreeCreditsStep
+            {...stepProps}
+            creditCount={creditCount}
+          />
+        );
       case 3:
-        return renderRatingStep();
+        return (
+          <RatingStep
+            {...stepProps}
+            rating={rating}
+            setRating={setRating}
+          />
+        );
       case 4:
-        return renderCompletionStep();
+        return (
+          <CompletionStep
+            {...stepProps}
+            completeOnboarding={completeOnboarding}
+            handleContinueAsGuest={handleContinueAsGuest}
+          />
+        );
       default:
-        return renderInterestsStep();
+        // Fallback to the first step
+        return (
+          <InterestsStep
+            {...stepProps}
+            selectedInterests={selectedInterests}
+            toggleInterest={toggleInterest}
+            canProceed={canProceedFromInterests}
+          />
+        );
     }
   };
 
-  return renderStep();
-};
+  return renderCurrentStep(); // Explicitly return the rendered step
+} // <-- Closing brace for OnboardingScreenComponent
+// Removed duplicated renderStep logic outside the component
 
 const styles = StyleSheet.create({
   container: {
@@ -1131,4 +714,257 @@ const styles = StyleSheet.create({
   },
 });
 
-export default OnboardingScreen; 
+// --- Step Components ---
+
+interface StepProps {
+  isDarkMode: boolean;
+  colors: ReturnType<typeof getThemeColors>;
+  fadeAnim: Animated.Value;
+  scaleAnim: Animated.Value;
+  slideAnim: Animated.Value;
+  handleNext: () => void;
+}
+
+interface InterestsStepProps extends StepProps {
+  selectedInterests: number[];
+  toggleInterest: (id: number) => void;
+  canProceed: boolean;
+}
+
+const InterestsStep: React.FC<InterestsStepProps> = React.memo(({
+  isDarkMode, colors, fadeAnim, scaleAnim, slideAnim, handleNext, selectedInterests, toggleInterest, canProceed
+}) => {
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <LinearGradient colors={colors.backgroundGradient} style={styles.gradientBackground}>
+        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateX: slideAnim }] }]}>
+          <View style={styles.headingContainer}>
+            <Text style={[styles.title, { color: colors.text }]}>Who Will You Chat With?</Text>
+            <Text style={[styles.subtitle, { color: colors.subtitle }]}>Select {MIN_INTERESTS}+ interests to discover AI characters you'll love.</Text>
+          </View>
+          <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.categoriesContainer}>
+              <Text style={[styles.categoryTitle, { color: colors.text }]}>Character Types & Genres</Text>
+              <View style={styles.interestsGrid}>
+                {interestCategories.map((item) => (
+                  <InterestItem key={item.id} item={item} selected={selectedInterests.includes(item.id)} onPress={toggleInterest} colors={colors} />
+                ))}
+              </View>
+              <Text style={[styles.categoryTitle, { color: colors.text, marginTop: 30 }]}>Conversation Styles</Text>
+              <View style={styles.interestsGrid}>
+                {lifestyleCategories.map((item) => (
+                  <InterestItem key={item.id} item={item} selected={selectedInterests.includes(item.id)} onPress={toggleInterest} colors={colors} />
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        </Animated.View>
+        <View style={styles.bottomContainer}>
+          <Text style={[styles.selectionCount, { color: colors.subtitle }]}>{selectedInterests.length} of {MIN_INTERESTS} minimum selected</Text>
+          <NextButton title="Continue" onPress={handleNext} disabled={!canProceed} colors={colors} icon="arrow-forward" />
+        </View>
+      </LinearGradient>
+    </SafeAreaView>
+  );
+});
+
+interface WelcomeGiftStepProps extends StepProps {
+  giftAnim: Animated.Value;
+}
+
+const WelcomeGiftStep: React.FC<WelcomeGiftStepProps> = React.memo(({
+  isDarkMode, colors, fadeAnim, scaleAnim, slideAnim, handleNext, giftAnim
+}) => {
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <LinearGradient colors={colors.backgroundGradient} style={styles.gradientBackground}>
+        <Animated.View style={[styles.giftContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateX: slideAnim }] }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Unlock Your First Conversations!</Text>
+          <Text style={[styles.giftDescription, { color: colors.subtitle }]}>Claim your welcome gift: free credits to start chatting with any AI character instantly!</Text>
+          <Animated.View style={[styles.giftBox, { transform: [{ translateY: giftAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -20] }) }] }]}>
+            <View style={styles.giftBoxTop}><View style={styles.giftBoxRibbon} /></View>
+            <View style={styles.giftBoxBottom} />
+            <Animated.View style={[styles.giftGlow, { opacity: giftAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.8] }) }]} />
+          </Animated.View>
+          <NextButton title="Continue" onPress={handleNext} colors={colors} icon="arrow-forward" />
+        </Animated.View>
+      </LinearGradient>
+    </SafeAreaView>
+  );
+});
+
+interface FreeCreditsStepProps extends StepProps {
+  creditCount: number;
+}
+
+const FreeCreditsStep: React.FC<FreeCreditsStepProps> = React.memo(({
+  isDarkMode, colors, fadeAnim, scaleAnim, slideAnim, handleNext, creditCount
+}) => {
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <LinearGradient colors={colors.backgroundGradient} style={styles.gradientBackground}>
+        <Animated.View style={[styles.giftContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateX: slideAnim }] }]}>
+          <LinearGradient colors={colors.creditBadgeBg} style={styles.creditBadge}>
+            <Ionicons name="star" size={32} color={colors.starColor} />
+          </LinearGradient>
+          <Text style={[styles.title, { color: colors.text }]}>Your Free Credits Are Here!</Text>
+          <Text style={[styles.giftDescription, { color: colors.subtitle }]}>Use your {FREE_CREDITS_AMOUNT} credits to dive into conversations across history, fantasy, and more.</Text>
+          <View style={styles.creditCounter}>
+            <LinearGradient colors={colors.creditCounterBg} style={styles.creditCounterBg}>
+              <Animated.Text style={[styles.creditCountText, { color: colors.text }]}>{creditCount}</Animated.Text>
+              <Text style={[styles.creditLabel, { color: colors.subtitle }]}>Free Credits</Text>
+            </LinearGradient>
+          </View>
+          <LinearGradient colors={colors.creditFeaturesBg} style={styles.creditFeatures}>
+            <CreditFeatureItem text="Chat with historical figures" colors={colors} />
+            <CreditFeatureItem text="Explore fantasy worlds" colors={colors} />
+            <CreditFeatureItem text="Get advice from experts" colors={colors} />
+          </LinearGradient>
+          <NextButton title="Continue" onPress={handleNext} colors={colors} icon="arrow-forward" />
+        </Animated.View>
+      </LinearGradient>
+    </SafeAreaView>
+  );
+});
+
+interface RatingStepProps extends StepProps {
+  rating: number;
+  setRating: (rating: number) => void;
+}
+
+const RatingStep: React.FC<RatingStepProps> = React.memo(({
+  isDarkMode, colors, fadeAnim, scaleAnim, slideAnim, handleNext, rating, setRating
+}) => {
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <LinearGradient colors={colors.backgroundGradient} style={styles.gradientBackground}>
+        <Animated.View style={[styles.giftContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateX: slideAnim }] }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Enjoying Fantasy AI?</Text>
+          <Text style={[styles.giftDescription, { color: colors.subtitle }]}>A quick rating helps others discover the world of AI characters. We'd appreciate your feedback!</Text>
+          <LinearGradient colors={colors.creditFeaturesBg} style={styles.ratingContainer}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity key={star} onPress={() => setRating(star)} style={styles.starButton}>
+                <Ionicons
+                  name={rating >= star ? 'star' : 'star-outline'}
+                  size={38}
+                  color={rating >= star ? colors.starColor : colors.starOutlineColor}
+                  style={styles.starIcon}
+                />
+              </TouchableOpacity>
+            ))}
+          </LinearGradient>
+          <NextButton title="Continue" onPress={handleNext} colors={colors} icon="arrow-forward" />
+        </Animated.View>
+      </LinearGradient>
+    </SafeAreaView>
+  );
+});
+
+interface CompletionStepProps extends StepProps {
+  completeOnboarding: () => void;
+  handleContinueAsGuest: () => void;
+}
+
+const CompletionStep: React.FC<CompletionStepProps> = React.memo(({
+  isDarkMode, colors, fadeAnim, scaleAnim, slideAnim, completeOnboarding, handleContinueAsGuest
+}) => {
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <LinearGradient colors={colors.backgroundGradient} style={styles.gradientBackground}>
+        <Animated.View style={[styles.giftContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateX: slideAnim }] }]}>
+          <Animated.View style={[styles.completionCircle, { backgroundColor: colors.completionCircleBg, transform: [{ scale: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }]}>
+            <Ionicons name="checkmark" size={80} color={colors.buttonText} />
+          </Animated.View>
+          <Text style={[styles.title, { color: colors.text }]}>Ready to Explore?</Text>
+          <Text style={[styles.giftDescription, { color: colors.subtitle }]}>Your journey into conversation starts now. Chat with anyone, anytime, anywhere!</Text>
+          <NextButton title="Get Started" onPress={completeOnboarding} colors={colors} icon="rocket-outline" />
+          <TouchableOpacity style={[styles.guestButton, { borderColor: colors.guestButtonBorder, backgroundColor: colors.guestButtonBg }]} onPress={handleContinueAsGuest}>
+            <Text style={[styles.guestButtonText, { color: colors.guestButtonText }]}>Continue as Guest</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </LinearGradient>
+    </SafeAreaView>
+  );
+});
+
+// --- Helper Components ---
+
+interface InterestItemProps {
+  item: InterestCategory;
+  selected: boolean;
+  onPress: (id: number) => void;
+  colors: ReturnType<typeof getThemeColors>;
+}
+
+const InterestItem: React.FC<InterestItemProps> = ({ item, selected, onPress, colors }) => (
+  <TouchableOpacity
+    style={[
+      styles.interestItem,
+      { backgroundColor: colors.interestItemBg, borderColor: selected ? colors.selectedInterestBorder : colors.interestItemBorder },
+      selected && styles.selectedInterest,
+    ]}
+    onPress={() => onPress(item.id)}
+    activeOpacity={0.7}
+  >
+    <LinearGradient
+      colors={selected ? colors.selectedIconBg : colors.interestIconBg}
+      style={[styles.iconContainer, selected && styles.selectedIconContainer]}
+    >
+      <Ionicons name={item.icon} size={22} color={selected ? colors.selectedIconColor : colors.interestIconColor} />
+    </LinearGradient>
+    <Text style={[styles.interestText, { color: selected ? colors.selectedInterestText : colors.text }]}>
+      {item.title}
+    </Text>
+    {selected && (
+      <View style={styles.checkmarkContainer}>
+        <Ionicons name="checkmark-circle" size={20} color={colors.selectedInterestBorder} />
+      </View>
+    )}
+  </TouchableOpacity>
+);
+
+interface NextButtonProps {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  colors: ReturnType<typeof getThemeColors>;
+  icon?: keyof typeof Ionicons.glyphMap;
+}
+
+const NextButton: React.FC<NextButtonProps> = ({ title, onPress, disabled = false, colors, icon }) => (
+  <TouchableOpacity
+    style={[styles.nextButton, disabled && { opacity: colors.disabledButtonOpacity }]}
+    onPress={onPress}
+    disabled={disabled}
+  >
+    <LinearGradient colors={colors.buttonGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientButton}>
+      <Text style={[styles.nextButtonText, { color: colors.buttonText }]}>{title}</Text>
+      {icon && <Ionicons name={icon} size={20} color={colors.buttonText} style={{ marginLeft: 8 }} />}
+    </LinearGradient>
+  </TouchableOpacity>
+);
+
+interface CreditFeatureItemProps {
+  text: string;
+  colors: ReturnType<typeof getThemeColors>;
+}
+
+const CreditFeatureItem: React.FC<CreditFeatureItemProps> = ({ text, colors }) => (
+  <View style={styles.creditFeatureItem}>
+    <Ionicons name="checkmark-circle" size={24} color={colors.checkmarkColor} />
+    <Text style={[styles.creditFeatureText, { color: colors.text }]}>{text}</Text>
+  </View>
+);
+
+// --- Styles ---
+// Styles remain largely the same, minor adjustments might be needed if component structure changed significantly
+// Styles remain largely the same, minor adjustments might be needed if component structure changed significantly
+
+// --- Exports ---
+export { OnboardingScreenComponent as OnboardingScreen }; // Named export
+export default OnboardingScreenComponent; // Default export

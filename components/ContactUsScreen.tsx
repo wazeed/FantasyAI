@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,27 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  ActivityIndicator, // Added for loading state
 } from 'react-native';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '../types/navigation'; // Adjust path as needed
 
-// Simplified contact categories
-const CONTACT_CATEGORIES = [
+// --- Constants ---
+const MIN_MESSAGE_LENGTH = 15; // Define minimum message length
+
+// --- Interfaces ---
+
+interface ContactCategory {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+
+// --- Static Data ---
+
+const CONTACT_CATEGORIES: ContactCategory[] = [
   { id: 'general', label: 'General Inquiry', icon: 'help-circle-outline' },
   { id: 'technical', label: 'Technical Support', icon: 'construct-outline' },
   { id: 'account', label: 'Account Help', icon: 'person-outline' },
@@ -24,95 +39,175 @@ const CONTACT_CATEGORIES = [
   { id: 'feature', label: 'Feature Suggestion', icon: 'bulb-outline' },
 ];
 
-export default function ContactUsScreen({ navigation }) {
-  const { isDarkMode } = React.useContext(ThemeContext);
-  
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const [email, setEmail] = useState('');
+// --- Helper Functions ---
 
-  // Dynamic colors based on theme
-  const colors = {
-    background: isDarkMode ? '#121212' : '#FFFFFF',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    subText: isDarkMode ? '#AAAAAA' : '#666666',
-    inputBackground: isDarkMode ? '#2A2A2A' : '#F5F5F5',
-    border: isDarkMode ? '#333333' : '#E0E0E0',
-    primary: isDarkMode ? '#3D8CFF' : '#4F46E5',
-    accent: isDarkMode ? '#3D8CFF' : '#4F46E5',
-    card: isDarkMode ? '#1E1E1E' : '#F9F9F9',
-    iconBackground: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(79,70,229,0.1)',
-    error: '#FF3B30',
-  };
+function isValidEmail(email: string): boolean {
+  // Basic email regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
 
-  const isValidEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+// --- Helper Components ---
 
-  const isFormValid = 
-    selectedCategory && 
-    message.trim().length > 10 && 
-    email.trim().length > 0 && 
-    isValidEmail(email);
+interface CategoryButtonProps {
+  category: ContactCategory;
+  isSelected: boolean;
+  onPress: (id: string) => void;
+  colors: Record<string, string>;
+}
 
-  const handleSubmit = () => {
-    if (!isFormValid) {
-      let errorMessage = 'Please check the following:';
-      if (!selectedCategory) errorMessage += '\n- Select a category';
-      if (message.trim().length <= 10) errorMessage += '\n- Provide a more detailed message';
-      if (email.trim().length === 0) errorMessage += '\n- Enter your email address';
-      else if (!isValidEmail(email)) errorMessage += '\n- Enter a valid email address';
-      
-      Alert.alert("Form Incomplete", errorMessage, [{ text: "OK" }]);
-      return;
-    }
-
-    // In a real app, this would send the message to the server
-    Alert.alert(
-      "Message Sent",
-      "Thank you for contacting us. We'll get back to you as soon as possible.",
-      [{ text: "OK", onPress: () => navigation.goBack() }]
-    );
-  };
-
-  const renderCategoryButton = (category) => (
+function CategoryButton({ category, isSelected, onPress, colors }: CategoryButtonProps) {
+  return (
     <TouchableOpacity
       key={category.id}
       style={[
         styles.categoryButton,
-        { 
-          backgroundColor: selectedCategory === category.id ? colors.primary : colors.card,
-          borderColor: selectedCategory === category.id ? colors.primary : colors.border
+        {
+          backgroundColor: isSelected ? colors.primary : colors.card,
+          borderColor: isSelected ? colors.primary : colors.border
         }
       ]}
-      onPress={() => setSelectedCategory(category.id)}
+      onPress={() => onPress(category.id)}
+      activeOpacity={0.7}
     >
-      <Ionicons 
-        name={category.icon} 
-        size={20} 
-        color={selectedCategory === category.id ? '#FFFFFF' : colors.accent} 
+      <Ionicons
+        name={category.icon}
+        size={20}
+        color={isSelected ? '#FFFFFF' : colors.accent}
         style={styles.categoryIcon}
       />
-      <Text 
+      <Text
         style={[
-          styles.categoryButtonText, 
-          { color: selectedCategory === category.id ? '#FFFFFF' : colors.text }
+          styles.categoryButtonText,
+          { color: isSelected ? '#FFFFFF' : colors.text }
         ]}
       >
         {category.label}
       </Text>
     </TouchableOpacity>
   );
+}
+
+// --- Main Component ---
+
+type ContactUsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ContactUs'>;
+
+interface ContactUsScreenProps {
+  navigation: ContactUsScreenNavigationProp;
+}
+
+export default function ContactUsScreen({ navigation }: ContactUsScreenProps) {
+  const themeContext = useContext(ThemeContext);
+  if (!themeContext) {
+    // Handle case where context is not provided, though this shouldn't happen in a well-structured app
+    throw new Error("ThemeContext must be used within a ThemeProvider");
+  }
+  const { isDarkMode } = themeContext;
+
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [message, setMessage] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Dynamic colors based on theme
+  const colors = useMemo(() => ({
+    background: isDarkMode ? '#121212' : '#FFFFFF',
+    text: isDarkMode ? '#FFFFFF' : '#000000',
+    subText: isDarkMode ? '#AAAAAA' : '#666666',
+    inputBackground: isDarkMode ? '#2C2C2E' : '#F5F5F5', // Specific input background
+    border: isDarkMode ? '#333333' : '#E0E0E0',
+    primary: isDarkMode ? '#3D8CFF' : '#4F46E5',
+    accent: isDarkMode ? '#3D8CFF' : '#4F46E5',
+    card: isDarkMode ? '#1E1E1E' : '#F9F9F9',
+    iconBackground: isDarkMode ? 'rgba(61, 140, 255, 0.2)' : 'rgba(79, 70, 229, 0.1)', // Adjusted alpha
+    error: '#FF3B30',
+    buttonText: '#FFFFFF',
+    disabled: isDarkMode ? '#444444' : '#CCCCCC', // Color for disabled button background
+  }), [isDarkMode]);
+
+  const validationErrors = useMemo(() => {
+    const errors: string[] = [];
+    if (!selectedCategory) errors.push('- Select a category');
+    if (message.trim().length < MIN_MESSAGE_LENGTH) errors.push(`- Provide a message of at least ${MIN_MESSAGE_LENGTH} characters`);
+    if (email.trim().length === 0) errors.push('- Enter your email address');
+    else if (!isValidEmail(email)) errors.push('- Enter a valid email address');
+    return errors;
+  }, [selectedCategory, message, email]);
+
+  const isFormValid = validationErrors.length === 0;
+
+  const handleSelectCategory = useCallback((id: string) => {
+    setSelectedCategory(id);
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (!isFormValid || isSubmitting) {
+      if (!isFormValid) {
+        const errorMessage = `Please check the following:\n${validationErrors.join('\n')}`;
+        Alert.alert("Form Incomplete", errorMessage, [{ text: "OK" }]);
+      }
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    // --- Simulate API Call ---
+    // In a real app, replace this with your API call logic
+    // Example:
+    // try {
+    //   await apiService.submitContactForm({ category: selectedCategory, message, email });
+    //   Alert.alert(
+    //     "Message Sent",
+    //     "Thank you for contacting us. We'll get back to you soon.",
+    //     [{ text: "OK", onPress: () => navigation.goBack() }]
+    //   );
+    // } catch (error) {
+    //   console.error("Contact form submission error:", error);
+    //   Alert.alert("Submission Failed", "Could not send message. Please try again later.");
+    // } finally {
+    //   setIsSubmitting(false);
+    // }
+    // -------------------------
+
+    // Placeholder simulation
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+
+    setIsSubmitting(false);
+    Alert.alert(
+      "Message Sent",
+      "Thank you for contacting us. We'll get back to you as soon as possible.",
+      [{ text: "OK", onPress: () => navigation.goBack() }]
+    );
+    // Reset form? Optional.
+    // setSelectedCategory('');
+    // setMessage('');
+    // setEmail('');
+
+  }, [isFormValid, isSubmitting, validationErrors, selectedCategory, message, email, navigation]);
+
+  const handleOpenMail = useCallback(() => {
+    Linking.openURL('mailto:support@fantasyai.com').catch(err => {
+      console.error("Failed to open mail app:", err);
+      Alert.alert("Error", "Could not open email app.");
+    });
+  }, []);
+
+  const navigateToHelpCenter = useCallback(() => {
+    navigation.navigate('HelpCenter', undefined);
+  }, [navigation]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} // 'height' can be problematic
         style={styles.keyboardAvoidView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0} // Adjust offset if needed
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.headerContainer}>
             <Text style={[styles.headerText, { color: colors.text }]}>Contact Support</Text>
             <Text style={[styles.subHeaderText, { color: colors.subText }]}>
@@ -120,6 +215,7 @@ export default function ContactUsScreen({ navigation }) {
             </Text>
           </View>
 
+          {/* Info Card */}
           <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.accent }]}>
             <View style={styles.infoCardContent}>
               <Ionicons name="time-outline" size={24} color={colors.accent} style={styles.infoCardIcon} />
@@ -131,25 +227,35 @@ export default function ContactUsScreen({ navigation }) {
             </View>
           </View>
 
+          {/* Category Selection */}
           <View style={styles.formSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>What can we help you with?</Text>
             <Text style={[styles.sectionDescription, { color: colors.subText }]}>
               Select a category below
             </Text>
             <View style={styles.categoriesContainer}>
-              {CONTACT_CATEGORIES.map(renderCategoryButton)}
+              {CONTACT_CATEGORIES.map((category) => (
+                <CategoryButton
+                  key={category.id}
+                  category={category}
+                  isSelected={selectedCategory === category.id}
+                  onPress={handleSelectCategory}
+                  colors={colors}
+                />
+              ))}
             </View>
           </View>
 
+          {/* Message Input */}
           <View style={styles.formSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Message</Text>
             <Text style={[styles.sectionDescription, { color: colors.subText }]}>
-              Please provide details about your inquiry
+              Please provide details about your inquiry (min. {MIN_MESSAGE_LENGTH} characters)
             </Text>
             <TextInput
               style={[
                 styles.messageInput,
-                { 
+                {
                   backgroundColor: colors.inputBackground,
                   borderColor: colors.border,
                   color: colors.text
@@ -160,58 +266,67 @@ export default function ContactUsScreen({ navigation }) {
               value={message}
               onChangeText={setMessage}
               multiline
-              numberOfLines={8}
-              textAlignVertical="top"
+              textAlignVertical="top" // Ensures text starts at the top on Android
             />
           </View>
 
+          {/* Email Input */}
           <View style={styles.formSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Contact Information</Text>
             <Text style={[styles.sectionDescription, { color: colors.subText }]}>
               Where should we send our reply?
             </Text>
-            <View style={styles.inputWithIcon}>
+            <View style={[
+              styles.inputWithIcon,
+              {
+                backgroundColor: colors.inputBackground,
+                borderColor: colors.border,
+              }
+            ]}>
               <Ionicons name="mail-outline" size={20} color={colors.subText} style={styles.inputIcon} />
               <TextInput
-                style={[
-                  styles.emailInput,
-                  { 
-                    backgroundColor: colors.inputBackground,
-                    borderColor: colors.border,
-                    color: colors.text
-                  }
-                ]}
+                style={[styles.emailInput, { color: colors.text }]}
                 placeholder="Your email address"
                 placeholderTextColor={colors.subText}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                returnKeyType="done"
               />
             </View>
           </View>
 
+          {/* Submit Button */}
           <TouchableOpacity
             style={[
               styles.submitButton,
-              { 
-                backgroundColor: isFormValid ? colors.primary : colors.inputBackground,
-                opacity: isFormValid ? 1 : 0.5
-              }
+              { backgroundColor: isFormValid ? colors.primary : colors.disabled },
+              !isFormValid && styles.disabledButton // Apply opacity style if invalid
             ]}
             onPress={handleSubmit}
-            disabled={!isFormValid}
+            disabled={isSubmitting || !isFormValid}
+            activeOpacity={0.8}
           >
-            <Text style={styles.submitButtonText}>Send Message</Text>
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color={colors.buttonText} />
+            ) : (
+              <Text style={[styles.submitButtonText, { color: isFormValid ? colors.buttonText : colors.subText }]}>
+                Send Message
+              </Text>
+            )}
           </TouchableOpacity>
 
+          {/* Alternative Contact */}
           <View style={styles.alternativeContact}>
             <Text style={[styles.alternativeText, { color: colors.subText }]}>
               You can also email us directly at:
             </Text>
-            <TouchableOpacity 
-              onPress={() => Linking.openURL('mailto:support@fantasyai.com')}
+            <TouchableOpacity
+              onPress={handleOpenMail}
               style={styles.emailLinkContainer}
+              activeOpacity={0.7}
             >
               <Ionicons name="mail" size={16} color={colors.primary} style={styles.emailLinkIcon} />
               <Text style={[styles.emailLink, { color: colors.primary }]}>
@@ -220,10 +335,13 @@ export default function ContactUsScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity 
+          {/* Back Button */}
+          <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.navigate('HelpCenter')}
+            onPress={navigateToHelpCenter}
+            activeOpacity={0.7}
           >
+            <Ionicons name="arrow-back-outline" size={16} color={colors.subText} style={styles.backButtonIcon} />
             <Text style={[styles.backButtonText, { color: colors.subText }]}>
               Return to Help Center
             </Text>
@@ -233,6 +351,8 @@ export default function ContactUsScreen({ navigation }) {
     </SafeAreaView>
   );
 }
+
+// --- Styles ---
 
 const styles = StyleSheet.create({
   container: {
@@ -249,8 +369,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerText: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 26, // Consistent
+    fontWeight: 'bold',
     marginBottom: 8,
   },
   subHeaderText: {
@@ -288,17 +408,19 @@ const styles = StyleSheet.create({
   sectionDescription: {
     fontSize: 14,
     marginBottom: 12,
+    lineHeight: 19,
   },
   categoriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    // justifyContent: 'space-between', // Adjust as needed
   },
   categoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 20, // More rounded
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     marginRight: 8,
     marginBottom: 8,
     borderWidth: 1,
@@ -315,40 +437,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     fontSize: 16,
-    minHeight: 160,
+    minHeight: 150, // Adjusted height
+    lineHeight: 22,
   },
   inputWithIcon: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    overflow: 'hidden', // Important for border radius on children
   },
   inputIcon: {
-    paddingHorizontal: 12,
+    paddingLeft: 14, // Adjusted padding
+    paddingRight: 8,
   },
   emailInput: {
     flex: 1,
-    paddingVertical: 14,
+    height: 50, // Defined height
     paddingRight: 16,
     fontSize: 16,
-    borderWidth: 0,
+    // Removed borderWidth as it's on parent
   },
   submitButton: {
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 25, // Consistent rounded
     alignItems: 'center',
     marginBottom: 24,
+    minHeight: 50, // Ensure consistent height with inputs
+    justifyContent: 'center',
+  },
+  disabledButton: {
+    opacity: 0.6, // Style for disabled state
   },
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    // Color set dynamically
   },
   alternativeContact: {
     alignItems: 'center',
     marginBottom: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderColor: '#E0E0E0', // Use theme color if needed: colors.border
   },
   alternativeText: {
     fontSize: 14,
@@ -357,6 +488,7 @@ const styles = StyleSheet.create({
   emailLinkContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 4, // Add padding for easier tapping
   },
   emailLinkIcon: {
     marginRight: 6,
@@ -366,11 +498,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   backButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    marginBottom: 12,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  backButtonIcon: {
+    marginRight: 6,
   },
   backButtonText: {
     fontSize: 14,
+    fontWeight: '500',
   },
-}); 
+});

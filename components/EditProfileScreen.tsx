@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,30 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+// Assuming Stack Navigator is used, adjust if different
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
+import { RootStackParamList } from '../types/navigation'; // Use the correct exported type
 
-// Placeholder profile data - would normally be fetched from the server
+// --- Types ---
+
+interface UserProfile {
+  username: string;
+  displayName: string;
+  bio: string;
+  location: string;
+  email: string;
+  phone: string;
+  interests: string[];
+  profileImageUrl?: string | null; // Add optional profile image URL
+}
+
+type EditProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'EditProfile'>; // Use RootStackParamList
+
+// --- Constants ---
+
+// Placeholder profile data - In a real app, this would be fetched via userService
+// potentially using useEffect and useState for loading/error states.
 const INITIAL_PROFILE_DATA = {
   username: 'johnsmith',
   displayName: 'John Smith',
@@ -25,63 +46,94 @@ const INITIAL_PROFILE_DATA = {
   interests: ['AI Characters', 'Storytelling', 'Science Fiction', 'Fantasy Worlds', 'Interactive Fiction'],
 };
 
-export default function EditProfileScreen({ navigation }) {
-  const { isGuest } = useAuth();
-  const [profileData, setProfileData] = useState({ ...INITIAL_PROFILE_DATA });
-  const [newInterest, setNewInterest] = useState('');
+export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ navigation }) => {
+  const { isGuest, user } = useAuth(); // Assuming user object holds profile data source
+  
+  // TODO: Fetch initial profile data from userService based on user?.id
+  // Example: const { data: initialData, isLoading, error } = useFetchUserProfile(user?.id);
+  const [profileData, setProfileData] = useState<UserProfile>({ ...INITIAL_PROFILE_DATA });
+  const [newInterest, setNewInterest] = useState<string>('');
+  const [isSaving, setIsSaving] = useState<boolean>(false); // Add saving state
 
-  const handleSave = () => {
-    // In a real app, this would send the updated profile data to the server
-    Alert.alert(
-      "Profile Updated", 
-      "Your profile has been successfully updated.",
-      [{ text: "OK", onPress: () => navigation.goBack() }]
-    );
-  };
+  // --- Handlers ---
 
-  const handleCancel = () => {
+  const handleSave = useCallback(async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    // TODO: Implement actual API call to userService.updateProfile(user?.id, profileData)
+    // Handle loading state and potential errors from the API call.
+    console.log("Saving profile data:", profileData);
+    try {
+      // const updatedProfile = await userService.updateProfile(user?.id, profileData);
+      // Optionally update local context/state with updatedProfile
+      Alert.alert(
+        "Profile Updated",
+        "Your profile has been successfully updated.", // In real app, use success message from API
+        [{ text: "OK", onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      console.error("Failed to save profile:", error);
+      Alert.alert("Save Failed", "Could not update your profile. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [profileData, navigation, isSaving]); // Add dependencies
+
+  const handleCancel = useCallback(() => {
     navigation.goBack();
-  };
+  }, [navigation]);
 
-  const handleAddInterest = () => {
-    if (newInterest.trim() === '') return;
+  const handleAddInterest = useCallback(() => {
+    const trimmedInterest = newInterest.trim();
+    if (trimmedInterest === '' || profileData.interests.includes(trimmedInterest)) {
+      // Prevent adding empty or duplicate interests
+      setNewInterest(''); // Clear input even if not added
+      return;
+    }
     
-    setProfileData({
-      ...profileData,
-      interests: [...profileData.interests, newInterest.trim()]
-    });
+    setProfileData(prevData => ({
+      ...prevData,
+      interests: [...prevData.interests, trimmedInterest]
+    }));
     
     setNewInterest('');
-  };
+  }, [newInterest, profileData.interests]);
 
-  const handleRemoveInterest = (index) => {
-    const updatedInterests = [...profileData.interests];
-    updatedInterests.splice(index, 1);
-    
-    setProfileData({
-      ...profileData,
-      interests: updatedInterests
-    });
-  };
+  const handleRemoveInterest = useCallback((indexToRemove: number) => {
+    setProfileData(prevData => ({
+      ...prevData,
+      interests: prevData.interests.filter((_, index) => index !== indexToRemove)
+    }));
+  }, []);
 
-  const updateField = (field, value) => {
-    setProfileData({
-      ...profileData,
+  // Use useCallback to prevent unnecessary re-creation of the handler on each render
+  const handleInputChange = useCallback((field: keyof UserProfile, value: string) => {
+     // Basic validation could be added here per field if needed
+    setProfileData(prevData => ({
+      ...prevData,
       [field]: value
-    });
-  };
+    }));
+  }, []);
 
-  const renderInterestItem = (interest, index) => (
-    <View key={index} style={styles.interestItem}>
+  // --- Render Functions ---
+
+  // Use useCallback if this function relies on props/state that don't change often,
+  // but given it uses index and interest directly, it's likely fine without it unless performance issues arise.
+  const renderInterestItem = (interest: string, index: number) => (
+    <View key={`${interest}-${index}`} style={styles.interestItem}>
+      {/* Use a more stable key if possible, e.g., if interests had IDs */}
       <Text style={styles.interestText}>{interest}</Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={() => handleRemoveInterest(index)}
         style={styles.removeInterestButton}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Increase touch area
       >
         <Text style={styles.removeInterestText}>×</Text>
       </TouchableOpacity>
     </View>
   );
+
+  // --- Conditional Rendering ---
 
   if (isGuest) {
     return (
@@ -111,10 +163,12 @@ export default function EditProfileScreen({ navigation }) {
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.profileImageSection}>
             <Image
-              source={require('../assets/profile-placeholder.png')}
+              // TODO: Replace with actual user profile image URI if available
+              source={profileData.profileImageUrl ? { uri: profileData.profileImageUrl } : require('../assets/profile-placeholder.png')}
               style={styles.profileImage}
             />
-            <TouchableOpacity style={styles.changePhotoButton}>
+            {/* TODO: Implement image picker functionality */}
+            <TouchableOpacity style={styles.changePhotoButton} onPress={() => Alert.alert("Feature Not Implemented", "Changing profile photo is not yet available.")}>
               <Text style={styles.changePhotoText}>Change Photo</Text>
             </TouchableOpacity>
           </View>
@@ -127,8 +181,8 @@ export default function EditProfileScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={profileData.username}
-                onChangeText={(text) => updateField('username', text)}
-                placeholder="Username"
+                onChangeText={(text) => handleInputChange('username', text)}
+                placeholder="Enter your username"
                 placeholderTextColor="#999"
               />
             </View>
@@ -138,8 +192,8 @@ export default function EditProfileScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={profileData.displayName}
-                onChangeText={(text) => updateField('displayName', text)}
-                placeholder="Display Name"
+                onChangeText={(text) => handleInputChange('displayName', text)}
+                placeholder="Enter your display name"
                 placeholderTextColor="#999"
               />
             </View>
@@ -149,8 +203,8 @@ export default function EditProfileScreen({ navigation }) {
               <TextInput
                 style={[styles.input, styles.multilineInput]}
                 value={profileData.bio}
-                onChangeText={(text) => updateField('bio', text)}
-                placeholder="Tell us about yourself..."
+                onChangeText={(text) => handleInputChange('bio', text)}
+                placeholder="Write a short bio..."
                 placeholderTextColor="#999"
                 multiline
                 numberOfLines={4}
@@ -163,8 +217,8 @@ export default function EditProfileScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={profileData.location}
-                onChangeText={(text) => updateField('location', text)}
-                placeholder="City, Country"
+                onChangeText={(text) => handleInputChange('location', text)}
+                placeholder="Enter your location"
                 placeholderTextColor="#999"
               />
             </View>
@@ -178,8 +232,8 @@ export default function EditProfileScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={profileData.email}
-                onChangeText={(text) => updateField('email', text)}
-                placeholder="Email"
+                onChangeText={(text) => handleInputChange('email', text)}
+                placeholder="Enter your email address"
                 placeholderTextColor="#999"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -191,8 +245,8 @@ export default function EditProfileScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 value={profileData.phone}
-                onChangeText={(text) => updateField('phone', text)}
-                placeholder="Phone Number"
+                onChangeText={(text) => handleInputChange('phone', text)}
+                placeholder="Enter your phone number"
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
               />
@@ -229,8 +283,9 @@ export default function EditProfileScreen({ navigation }) {
             <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSave}
+              disabled={isSaving} // Disable button while saving
             >
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

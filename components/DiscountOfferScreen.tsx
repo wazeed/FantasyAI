@@ -15,28 +15,43 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+// Assuming RootStackParamList is defined in your navigation types
+// import { RootStackParamList } from '../types/navigation';
+type RootStackParamList = { // Placeholder type
+  SubscriptionScreen: { isSpecialOffer: boolean; returnToCharacter?: string };
+  Chat: { character: string };
+  [key: string]: any; // Allow other routes
+};
 
 const { width, height } = Dimensions.get('window');
 
-type DiscountOfferScreenProps = {
+// Constants
+const INITIAL_MINUTES = 52;
+const CLOSE_BUTTON_DELAY_PROD = 15000; // 15 seconds
+const CLOSE_BUTTON_DELAY_DEV = 5000; // 5 seconds
+const ANIMATION_DURATION = 500; // ms
+const ORIGINAL_PRICE = '$49.99';
+const DISCOUNTED_PRICE_INFO = '$29.99/year. Cancel anytime';
+
+interface DiscountOfferScreenProps {
   route?: {
     params?: {
       fromCharacter?: boolean;
       character?: string;
     };
   };
-};
+}
 
 const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
-  const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { isDarkMode } = useContext(ThemeContext);
   const { fromCharacter, character } = route?.params || { fromCharacter: false, character: null };
   
-  // Countdown timer (52 minutes)
-  const [minutes, setMinutes] = useState(52);
+  // Countdown timer
+  const [minutes, setMinutes] = useState(INITIAL_MINUTES);
   const [seconds, setSeconds] = useState(0);
   const [showCloseButton, setShowCloseButton] = useState(false);
-  const closeButtonOpacity = useState(new Animated.Value(0))[0];
+  const closeButtonOpacity = useState(new Animated.Value(0))[0]; // Correct usage of useState for Animated.Value
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -50,38 +65,38 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
       }
     }, 1000);
 
-    // Show close button after 15 seconds
+    // Show close button after delay
     const closeButtonTimer = setTimeout(() => {
-      console.log('15 seconds passed, showing close button');
       setShowCloseButton(true);
       Animated.timing(closeButtonOpacity, {
         toValue: 1,
-        duration: 500,
+        duration: ANIMATION_DURATION,
         useNativeDriver: true,
       }).start();
-    }, 15000);
+    }, CLOSE_BUTTON_DELAY_PROD);
 
     // For testing - show close button after 5 seconds in development
     if (__DEV__) {
-      console.log('Development mode: Close button will appear in 5 seconds');
-      // Clear the 15s timer if the 5s one is active
+      // Clear the prod timer if the dev one is active
       clearTimeout(closeButtonTimer);
-      setTimeout(() => {
-        console.log('DEV: Showing close button');
+      const devCloseButtonTimer = setTimeout(() => {
         setShowCloseButton(true);
         Animated.timing(closeButtonOpacity, {
           toValue: 1,
-          duration: 500,
+          duration: ANIMATION_DURATION,
           useNativeDriver: true,
         }).start();
-      }, 5000);
+      }, CLOSE_BUTTON_DELAY_DEV);
+      // Ensure dev timer is also cleared on unmount
+      return () => clearTimeout(devCloseButtonTimer);
     }
 
     return () => {
       clearInterval(timer);
+      // Clear prod timer if it wasn't replaced by dev timer
       clearTimeout(closeButtonTimer);
     };
-  }, [minutes, seconds]); // Removed closeButtonOpacity from dependencies
+  }, [minutes, seconds, closeButtonOpacity]); // Added closeButtonOpacity back as it's used in the effect's Animated.timing
 
   const handleRedeemOffer = () => {
     if (fromCharacter && character) {
@@ -101,9 +116,8 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
     }
   };
 
-  const backgroundColors = isDarkMode 
-    ? ['#0a0d45', '#1a1464', '#261b81'] as const
-    : ['#0a0d45', '#1a1464', '#261b81'] as const;
+  // Background colors are currently the same for light/dark mode, assuming intentional.
+  const backgroundColors = ['#0a0d45', '#1a1464', '#261b81'] as const;
 
   // Text colors based on theme
   const textColor = isDarkMode ? '#ffffff' : '#000000';
@@ -124,12 +138,14 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
         end={{ x: 1, y: 1 }}
         style={styles.container}
       >
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerTextContainer}>
             <Text style={[styles.offerTitle, { color: textColor }]}>One-time Offer</Text>
           </View>
         </View>
 
+        {/* Close Button */}
         {showCloseButton && (
           <Animated.View style={[styles.closeButtonContainer, { opacity: closeButtonOpacity }]}>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
@@ -138,87 +154,146 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
           </Animated.View>
         )}
 
+        {/* Main Content */}
         <View style={styles.contentContainer}>
+          {/* Top Section: Badge and Title */}
           <View style={styles.topSection}>
-            <View style={styles.discountBadgeContainer}>
-              <LinearGradient
-                colors={['#FF6B6B', '#FF8E53']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.discountBadge}
-              >
-                <View style={styles.discountInner}>
-                  <Text style={[styles.discountText, { color: textColor }]}>50%</Text>
-                  <Text style={[styles.discountSubtext, { color: textColor }]}>OFF</Text>
-                </View>
-              </LinearGradient>
-            </View>
-
+            <DiscountBadge textColor={textColor} />
             <Text style={[styles.featuresTitle, { color: textColor }]}>Limited Time Premium Access</Text>
           </View>
           
-          <View style={styles.timerContainer}>
-            <Text style={[styles.timerLabel, { color: secondaryTextColor }]}>Your offer expires in</Text>
-            <View style={styles.timerRow}>
-              <View style={styles.timerBox}>
-                <Text style={[styles.timerDigit, { color: textColor }]}>{minutes.toString().padStart(2, '0').charAt(0)}</Text>
-              </View>
-              <View style={styles.timerBox}>
-                <Text style={[styles.timerDigit, { color: textColor }]}>{minutes.toString().padStart(2, '0').charAt(1)}</Text>
-              </View>
-              <Text style={[styles.timerSeparator, { color: textColor }]}>:</Text>
-              <View style={styles.timerBox}>
-                <Text style={[styles.timerDigit, { color: textColor }]}>{seconds.toString().padStart(2, '0').charAt(0)}</Text>
-              </View>
-              <View style={styles.timerBox}>
-                <Text style={[styles.timerDigit, { color: textColor }]}>{seconds.toString().padStart(2, '0').charAt(1)}</Text>
-              </View>
-            </View>
-          </View>
+          {/* Timer */}
+          <CountdownTimerDisplay
+            minutes={minutes}
+            seconds={seconds}
+            textColor={textColor}
+            secondaryTextColor={secondaryTextColor}
+          />
 
+          {/* Benefits List */}
           <View style={styles.benefitsContainer}>
             {benefits.map((benefit, index) => (
-              <View key={index} style={styles.benefitItem}>
-                <LinearGradient
-                  colors={['#4CAF50', '#2E7D32']}
-                  style={styles.checkCircle}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name="checkmark" size={18} color="white" />
-                </LinearGradient>
-                <Text style={[styles.benefitText, { color: textColor }]}>{benefit.text}</Text>
-              </View>
+              <BenefitItem key={index} text={benefit.text} textColor={textColor} />
             ))}
           </View>
 
-          <View style={styles.bottomSection}>
-            <TouchableOpacity 
-              style={styles.redeemButton} 
-              onPress={handleRedeemOffer}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#4CAF50', '#2E7D32']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.redeemGradient}
-              >
-                <Text style={[styles.redeemButtonText, { color: textColor }]}>Redeem Offer</Text>
-                <Ionicons name="arrow-forward" size={20} color={textColor} style={styles.redeemIcon} />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <View style={styles.priceContainer}>
-              <Text style={[styles.originalPrice, { color: secondaryTextColor }]}>$49.99</Text>
-              <Text style={[styles.discountedPrice, { color: textColor }]}>$29.99/year. Cancel anytime</Text>
-            </View>
-          </View>
+          {/* Bottom Section: Redeem Button and Price */}
+          <RedeemButtonSection
+            onRedeem={handleRedeemOffer}
+            textColor={textColor}
+            secondaryTextColor={secondaryTextColor}
+          />
         </View>
       </LinearGradient>
     </SafeAreaView>
   );
 };
+
+// --- Subcomponents ---
+
+interface DiscountBadgeProps {
+  textColor: string;
+}
+
+const DiscountBadge: React.FC<DiscountBadgeProps> = ({ textColor }) => (
+  <View style={styles.discountBadgeContainer}>
+    <LinearGradient
+      colors={['#FF6B6B', '#FF8E53']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.discountBadge}
+    >
+      <View style={styles.discountInner}>
+        <Text style={[styles.discountText, { color: textColor }]}>50%</Text>
+        <Text style={[styles.discountSubtext, { color: textColor }]}>OFF</Text>
+      </View>
+    </LinearGradient>
+  </View>
+);
+
+interface CountdownTimerDisplayProps {
+  minutes: number;
+  seconds: number;
+  textColor: string;
+  secondaryTextColor: string;
+}
+
+const CountdownTimerDisplay: React.FC<CountdownTimerDisplayProps> = ({ minutes, seconds, textColor, secondaryTextColor }) => {
+  const formatDigit = (num: number, charIndex: number) => num.toString().padStart(2, '0').charAt(charIndex);
+
+  return (
+    <View style={styles.timerContainer}>
+      <Text style={[styles.timerLabel, { color: secondaryTextColor }]}>Your offer expires in</Text>
+      <View style={styles.timerRow}>
+        <View style={styles.timerBox}>
+          <Text style={[styles.timerDigit, { color: textColor }]}>{formatDigit(minutes, 0)}</Text>
+        </View>
+        <View style={styles.timerBox}>
+          <Text style={[styles.timerDigit, { color: textColor }]}>{formatDigit(minutes, 1)}</Text>
+        </View>
+        <Text style={[styles.timerSeparator, { color: textColor }]}>:</Text>
+        <View style={styles.timerBox}>
+          <Text style={[styles.timerDigit, { color: textColor }]}>{formatDigit(seconds, 0)}</Text>
+        </View>
+        <View style={styles.timerBox}>
+          <Text style={[styles.timerDigit, { color: textColor }]}>{formatDigit(seconds, 1)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+interface BenefitItemProps {
+  text: string;
+  textColor: string;
+}
+
+const BenefitItem: React.FC<BenefitItemProps> = ({ text, textColor }) => (
+  <View style={styles.benefitItem}>
+    <LinearGradient
+      colors={['#4CAF50', '#2E7D32']}
+      style={styles.checkCircle}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <Ionicons name="checkmark" size={18} color="white" />
+    </LinearGradient>
+    <Text style={[styles.benefitText, { color: textColor }]}>{text}</Text>
+  </View>
+);
+
+interface RedeemButtonSectionProps {
+  onRedeem: () => void;
+  textColor: string;
+  secondaryTextColor: string;
+}
+
+const RedeemButtonSection: React.FC<RedeemButtonSectionProps> = ({ onRedeem, textColor, secondaryTextColor }) => (
+  <View style={styles.bottomSection}>
+    <TouchableOpacity
+      style={styles.redeemButton}
+      onPress={onRedeem}
+      activeOpacity={0.8}
+    >
+      <LinearGradient
+        colors={['#4CAF50', '#2E7D32']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.redeemGradient}
+      >
+        <Text style={[styles.redeemButtonText, { color: textColor }]}>Redeem Offer</Text>
+        <Ionicons name="arrow-forward" size={20} color={textColor} style={styles.redeemIcon} />
+      </LinearGradient>
+    </TouchableOpacity>
+
+    <View style={styles.priceContainer}>
+      <Text style={[styles.originalPrice, { color: secondaryTextColor }]}>{ORIGINAL_PRICE}</Text>
+      <Text style={[styles.discountedPrice, { color: textColor }]}>{DISCOUNTED_PRICE_INFO}</Text>
+    </View>
+  </View>
+);
+
+// --- Styles ---
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -442,4 +517,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DiscountOfferScreen; 
+export { DiscountOfferScreen }; // Named export
+export default DiscountOfferScreen;

@@ -1,56 +1,54 @@
-import React, { useState, useContext, useRef } from 'react';
+import React, { useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
-  Dimensions,
   SafeAreaView,
   StatusBar,
   TextInput,
-  ScrollView, // Keep ScrollView if needed for categories, otherwise remove
-  Animated, // Keep Animated import if needed elsewhere, or remove if not
-  RefreshControl,
+  Pressable, // Keep Pressable
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+// Removed unused: Dimensions, useRef, useEffect, Animated, RefreshControl, ScrollView, LinearGradient, Image
+// Removed unused: BottomTabNavigationProp (using NavigationProp is sufficient)
 
-// Define types for our data structures
-type Tool = {
+// --- Type Definitions ---
+
+// Renamed Tool to Assistant for clarity
+interface Assistant {
   id: string;
   name: string;
   description: string;
-  image: any; // Keep for now, needed for navigation params
+  image: any; // Keep for now for navigation params compatibility
   tags: string[];
-  followers: string; // Keep for now, might remove if completely unused
+  // followers: string; // Removed as unused
   category: string;
   suggestedQuestions: string[];
-};
+}
 
-type Category = {
+interface Category {
   id: string;
   name: string;
-  selected: boolean;
-};
+}
 
-// Updated ParamList to potentially include icon info later
-type CharacterParams = {
+// Parameters for navigating to the Chat screen
+interface CharacterParams {
   id: string;
   name: string;
   avatar: any; // Keep image for chat screen compatibility for now
   description?: string;
   tags?: string[];
   category?: string;
-  iconName?: keyof typeof Ionicons.glyphMap; // Optional icon info
-  iconColor?: string; // Optional icon info
-};
+  iconName?: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+}
 
+// Navigation stack parameters
 type RootStackParamList = {
   Home: undefined;
   Chat: { character: CharacterParams };
@@ -58,31 +56,40 @@ type RootStackParamList = {
     fromCharacter: boolean;
     character: CharacterParams;
   };
-  Profile: undefined;
-  HelpCenter: undefined;
+  Profile: undefined; // Keep for type definition even if navigation is removed from this screen
+  HelpCenter: undefined; // Keep for type definition
 };
 
-type HomeScreenProps = {
-  navigation: BottomTabNavigationProp<RootStackParamList, 'Home'>;
-};
+// Component Props
+type HomeScreenNavigationProp = NavigationProp<RootStackParamList, 'Home'>;
 
-const { width } = Dimensions.get('window');
-// Adjusted column width calculation for better spacing
+// --- Constants ---
+
 const PADDING_HORIZONTAL = 16;
 const GAP = 16;
 const NUM_COLUMNS = 2;
+// Calculate column width dynamically (moved inside component or keep global if no dependency change)
+// const { width } = Dimensions.get('window'); // Removed Dimensions import
+// const COLUMN_WIDTH = (width - PADDING_HORIZONTAL * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
+// Note: COLUMN_WIDTH calculation needs Dimensions, re-import or calculate differently if needed.
+// For now, assuming a fixed width or alternative calculation method if Dimensions is truly removed.
+// Re-adding Dimensions temporarily for width calculation.
+import { Dimensions } from 'react-native';
+const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - PADDING_HORIZONTAL * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
 
-// New tools/categories data (Keep original data structure for now)
-const TOOLS = [
+// Renamed TOOLS to ASSISTANTS
+const ASSISTANTS: Assistant[] = [
+  // ... (Keep the existing assistant data, ensure it matches the 'Assistant' interface)
+  // Example entry:
   {
     id: 'self-growth',
     name: 'Self-Growth',
     description: 'Become a better version of yourself',
-    image: require('../assets/char1.png'), // Keep image ref for now
+    image: require('../assets/char1.png'),
     tags: ['Personal', 'Development', 'Improvement'],
-    followers: '1.2M',
+    // followers: '1.2M', // Removed
     category: 'Life',
     suggestedQuestions: [
       "How can I develop better daily habits?",
@@ -97,7 +104,6 @@ const TOOLS = [
     description: 'Fill your life with purpose and joy',
     image: require('../assets/char2.png'),
     tags: ['Habits', 'Routines', 'Wellbeing'],
-    followers: '980K',
     category: 'Life',
     suggestedQuestions: [
       "How can I create a more balanced daily routine?",
@@ -112,7 +118,6 @@ const TOOLS = [
     description: 'Enrich your life with wisdom',
     image: require('../assets/char3.png'),
     tags: ['Mindfulness', 'Meditation', 'Philosophy'],
-    followers: '1.5M',
     category: 'Life',
     suggestedQuestions: [
       "How can I start a meditation practice?",
@@ -127,7 +132,6 @@ const TOOLS = [
     description: 'Achieve your fitness goals',
     image: require('../assets/char4.png'),
     tags: ['Workouts', 'Nutrition', 'Health'],
-    followers: '2.3M',
     category: 'Health',
     suggestedQuestions: [
       "What's a good beginner workout routine?",
@@ -142,7 +146,6 @@ const TOOLS = [
     description: 'Get your work done faster',
     image: require('../assets/char5.png'),
     tags: ['Productivity', 'Skills', 'Growth'],
-    followers: '1.8M',
     category: 'Work',
     suggestedQuestions: [
       "How can I be more productive at work?",
@@ -157,7 +160,6 @@ const TOOLS = [
     description: 'Craft emails in seconds',
     image: require('../assets/char6.png'),
     tags: ['Professional', 'Communication', 'Business'],
-    followers: '1.1M',
     category: 'Work',
     suggestedQuestions: [
       "How do I write a professional follow-up email?",
@@ -172,7 +174,6 @@ const TOOLS = [
     description: 'Make songs and poems',
     image: require('../assets/char7.png'),
     tags: ['Creative', 'Writing', 'Artistic'],
-    followers: '890K',
     category: 'Creative',
     suggestedQuestions: [
       "How do I write a catchy chorus?",
@@ -187,7 +188,6 @@ const TOOLS = [
     description: 'Explore exciting activities',
     image: require('../assets/char8.png'),
     tags: ['Games', 'Entertainment', 'Leisure'],
-    followers: '1.4M',
     category: 'Entertainment',
     suggestedQuestions: [
       "What are some fun party games for adults?",
@@ -202,7 +202,6 @@ const TOOLS = [
     description: 'Explore any web content',
     image: require('../assets/char9.png'),
     tags: ['Research', 'Information', 'Learning'],
-    followers: '1.6M',
     category: 'Education',
     suggestedQuestions: [
       "How do I research a topic effectively?",
@@ -217,7 +216,6 @@ const TOOLS = [
     description: 'Simplify your language learning',
     image: require('../assets/char10.png'),
     tags: ['Translation', 'Practice', 'Culture'],
-    followers: '1.3M',
     category: 'Education',
     suggestedQuestions: [
       "What's the fastest way to learn a new language?",
@@ -232,7 +230,6 @@ const TOOLS = [
     description: 'Quickly solve math problems',
     image: require('../assets/character/anime1.png'),
     tags: ['Calculations', 'Formulas', 'Equations'],
-    followers: '950K',
     category: 'Education',
     suggestedQuestions: [
       "How do I solve quadratic equations?",
@@ -247,7 +244,6 @@ const TOOLS = [
     description: 'Study any subject with ease',
     image: require('../assets/character/anime2.png'),
     tags: ['Tutoring', 'Knowledge', 'Study'],
-    followers: '1.7M',
     category: 'Education',
     suggestedQuestions: [
       "How can AI help me learn more effectively?",
@@ -262,7 +258,6 @@ const TOOLS = [
     description: 'Get help with homework',
     image: require('../assets/character/anime3.png'),
     tags: ['Assignments', 'Projects', 'Research'],
-    followers: '1.2M',
     category: 'Education',
     suggestedQuestions: [
       "How can I improve my study habits?",
@@ -277,7 +272,6 @@ const TOOLS = [
     description: 'Create content for social media',
     image: require('../assets/character/anime4.png'),
     tags: ['Posts', 'Captions', 'Marketing'],
-    followers: '2.1M',
     category: 'Marketing',
     suggestedQuestions: [
       "How can I grow my social media following?",
@@ -292,7 +286,6 @@ const TOOLS = [
     description: 'Find a quote for any occasion',
     image: require('../assets/character/anime5.png'),
     tags: ['Inspiration', 'Wisdom', 'Sayings'],
-    followers: '1.5M',
     category: 'Creative',
     suggestedQuestions: [
       "What are some inspirational quotes about success?",
@@ -307,7 +300,6 @@ const TOOLS = [
     description: 'Scan and extract text from docs',
     image: require('../assets/character/celebrity1.png'),
     tags: ['OCR', 'Documents', 'Text'],
-    followers: '1.1M',
     category: 'Productivity',
     suggestedQuestions: [
       "How accurate is the text extraction?",
@@ -322,7 +314,6 @@ const TOOLS = [
     description: 'Break language barriers on the go',
     image: require('../assets/character/celebrity2.png'),
     tags: ['Languages', 'Communication', 'Global'],
-    followers: '1.8M',
     category: 'Productivity',
     suggestedQuestions: [
       "How many languages does the translator support?",
@@ -333,234 +324,269 @@ const TOOLS = [
   }
 ];
 
-// Categories for the horizontal scroll
-const CATEGORIES = [
-  { id: 'all', name: 'All', selected: true },
-  { id: 'life', name: 'Life', selected: false },
-  { id: 'health', name: 'Health', selected: false },
-  { id: 'work', name: 'Work', selected: false },
-  { id: 'creative', name: 'Creative', selected: false },
-  { id: 'education', name: 'Education', selected: false },
-  { id: 'marketing', name: 'Marketing', selected: false },
-  { id: 'productivity', name: 'Productivity', selected: false },
-  { id: 'entertainment', name: 'Entertainment', selected: false },
+// Initial categories data
+const INITIAL_CATEGORIES: Category[] = [
+  { id: 'all', name: 'All' },
+  { id: 'life', name: 'Life' },
+  { id: 'health', name: 'Health' },
+  { id: 'work', name: 'Work' },
+  { id: 'creative', name: 'Creative' },
+  { id: 'education', name: 'Education' },
+  { id: 'marketing', name: 'Marketing' },
+  { id: 'productivity', name: 'Productivity' },
+  { id: 'entertainment', name: 'Entertainment' },
 ];
 
-export default function HomeScreen({ navigation }: HomeScreenProps) {
+// Icon mapping for assistants
+const ASSISTANT_ICONS: { [key: string]: { name: keyof typeof Ionicons.glyphMap; color: string } } = {
+  'self-growth': { name: 'ribbon-outline', color: '#34D399' },
+  'lifestyle': { name: 'sunny-outline', color: '#FBBF24' },
+  'spirituality': { name: 'sparkles-outline', color: '#A78BFA' },
+  'fitness': { name: 'barbell-outline', color: '#EF4444' },
+  'career': { name: 'briefcase-outline', color: '#60A5FA' },
+  'emails': { name: 'mail-outline', color: '#93C5FD' },
+  'lyrics-poetry': { name: 'musical-notes-outline', color: '#F472B6' },
+  'fun': { name: 'game-controller-outline', color: '#EC4899' },
+  'link-ask': { name: 'link-outline', color: '#2DD4BF' },
+  'languages': { name: 'language-outline', color: '#818CF8' },
+  'math': { name: 'calculator-outline', color: '#F87171' },
+  'ai-learning': { name: 'school-outline', color: '#6EE7B7' },
+  'school': { name: 'library-outline', color: '#FCD34D' },
+  'social-media': { name: 'share-social-outline', color: '#A5B4FC' },
+  'quote-maker': { name: 'chatbubble-ellipses-outline', color: '#C4B5FD' },
+  'ai-scanner': { name: 'scan-outline', color: '#7DD3FC' },
+  'translator': { name: 'swap-horizontal-outline', color: '#FDA4AF' },
+};
+
+// --- Helper Components ---
+
+interface CategoryButtonProps {
+  item: Category;
+  isSelected: boolean;
+  onPress: (id: string) => void;
+  colors: { categorySelected: string; categoryBg: string; subText: string; };
+}
+
+const CategoryButton = React.memo(({ item, isSelected, onPress, colors }: CategoryButtonProps) => (
+  <TouchableOpacity
+    style={[
+      styles.categoryItem,
+      { backgroundColor: isSelected ? colors.categorySelected : colors.categoryBg },
+      isSelected && styles.categoryItemSelected // Keep for potential specific selected styles
+    ]}
+    onPress={() => onPress(item.id)}
+    accessibilityRole="button"
+    accessibilityState={{ selected: isSelected }}
+    accessibilityLabel={item.name}
+  >
+    <Text
+      style={[
+        styles.categoryText,
+        { color: isSelected ? '#FFFFFF' : colors.subText },
+        isSelected && styles.categoryTextSelected // Keep for potential specific selected styles
+      ]}
+    >
+      {item.name}
+    </Text>
+  </TouchableOpacity>
+));
+
+interface AssistantCardProps {
+  item: Assistant;
+  onPress: (assistant: Assistant) => void;
+  colors: { text: string; subText: string; accent: string; }; // Added accent color
+  isDarkMode: boolean;
+}
+
+const AssistantCard = React.memo(({ item, onPress, colors, isDarkMode }: AssistantCardProps) => {
+  const iconInfo = ASSISTANT_ICONS[item.id] || { name: 'help-circle-outline', color: colors.accent }; // Use accent color as fallback
+
+  return (
+    <View style={{ width: COLUMN_WIDTH }}>
+      <Pressable
+        style={[
+          styles.assistantCard, // Renamed from toolCard
+          isDarkMode ? styles.darkCard : styles.lightCard
+        ]}
+        onPress={() => onPress(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}. ${item.description}`}
+      >
+        {/* Icon Container */}
+        <View style={[styles.iconContainer, { backgroundColor: iconInfo.color }]}>
+          <Ionicons
+            name={iconInfo.name}
+            size={32}
+            color="#FFFFFF" // Keep icon color white for contrast
+          />
+        </View>
+
+        {/* Assistant Info */}
+        <View style={styles.assistantInfo}>
+          <Text style={[styles.assistantName, { color: colors.text }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={[styles.assistantDescription, { color: colors.subText }]} numberOfLines={2}>
+            {item.description}
+          </Text>
+        </View>
+      </Pressable>
+    </View>
+  );
+});
+
+// --- Main Component ---
+
+export default function HomeScreen() {
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const { isDarkMode } = useContext(ThemeContext);
-  const { isGuest, shouldShowDiscountOffer, markDiscountOfferShown, signOut } = useAuth();
-  const [categories, setCategories] = useState<Category[]>(CATEGORIES);
+  const { isGuest, shouldShowDiscountOffer, markDiscountOfferShown } = useAuth(); // Removed unused signOut
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const searchInputRef = useRef<TextInput>(null);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  
+  // Removed unused: searchInputRef (no focus trigger shown), isRefreshing, toolAnimationRefs
+
   // Dynamic colors based on theme
   const colors = {
     background: isDarkMode ? '#121212' : '#FFFFFF',
     text: isDarkMode ? '#FFFFFF' : '#000000',
     subText: isDarkMode ? '#AAAAAA' : '#666666',
-    card: isDarkMode ? '#1E1E1E' : '#FFFFFF', // Use white for light mode cards
-    cardBorder: isDarkMode ? '#333333' : '#E0E0E0', // Lighter border for light mode
-    accent: isDarkMode ? '#3D8CFF' : '#7E3AF2',
+    card: isDarkMode ? '#1E1E1E' : '#FFFFFF',
+    cardBorder: isDarkMode ? '#333333' : '#E0E0E0',
+    accent: isDarkMode ? '#3D8CFF' : '#7E3AF2', // Keep accent for fallback icon color
     categoryBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
     categorySelected: isDarkMode ? '#3D8CFF' : '#7E3AF2',
-    categoryText: isDarkMode ? '#FFFFFF' : '#000000',
+    categoryText: isDarkMode ? '#FFFFFF' : '#000000', // Keep for potential direct use
     searchBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
-    buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
+    // buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0', // Removed unused buttonBg
   };
 
-  // Icon mapping for tools (defined inside component scope)
-  const TOOL_ICONS: { [key: string]: { name: keyof typeof Ionicons.glyphMap; color: string } } = {
-    'self-growth': { name: 'ribbon-outline', color: '#34D399' }, // Teal/Green
-    'lifestyle': { name: 'sunny-outline', color: '#FBBF24' }, // Yellow/Orange
-    'spirituality': { name: 'sparkles-outline', color: '#A78BFA' }, // Purple
-    'fitness': { name: 'barbell-outline', color: '#EF4444' }, // Red
-    'career': { name: 'briefcase-outline', color: '#60A5FA' }, // Blue
-    'emails': { name: 'mail-outline', color: '#93C5FD' }, // Light Blue
-    'lyrics-poetry': { name: 'musical-notes-outline', color: '#F472B6' }, // Pink
-    'fun': { name: 'game-controller-outline', color: '#EC4899' }, // Magenta
-    'link-ask': { name: 'link-outline', color: '#2DD4BF' }, // Cyan
-    'languages': { name: 'language-outline', color: '#818CF8' }, // Indigo
-    'math': { name: 'calculator-outline', color: '#F87171' }, // Light Red
-    'ai-learning': { name: 'school-outline', color: '#6EE7B7' }, // Light Green
-    'school': { name: 'library-outline', color: '#FCD34D' }, // Amber
-    'social-media': { name: 'share-social-outline', color: '#A5B4FC' }, // Light Indigo
-    'quote-maker': { name: 'chatbubble-ellipses-outline', color: '#C4B5FD' }, // Light Purple
-    'ai-scanner': { name: 'scan-outline', color: '#7DD3FC' }, // Sky Blue
-    'translator': { name: 'swap-horizontal-outline', color: '#FDA4AF' }, // Light Pink
-  };
-
-  const handleCategoryPress = (selectedId: string) => {
-    const updated = categories.map(cat => ({
-      ...cat,
-      selected: cat.id === selectedId
-    }));
-    setCategories(updated);
+  // Memoized category press handler
+  const handleCategoryPress = useCallback((selectedId: string) => {
     setSelectedCategory(selectedId);
-  };
+  }, []);
 
-  const handleToolPress = async (tool: Tool) => {
-    const iconInfo = TOOL_ICONS[tool.id] || { name: 'help-circle-outline', color: colors.accent };
+  // Memoized assistant press handler (renamed from handleToolPress)
+  const handleAssistantPress = useCallback(async (assistant: Assistant) => {
+    const iconInfo = ASSISTANT_ICONS[assistant.id] || { name: 'help-circle-outline', color: colors.accent };
     const characterData: CharacterParams = {
-      id: tool.id,
-      name: tool.name,
-      avatar: tool.image, // Keep image for now
-      description: tool.description,
-      tags: tool.tags,
-      category: tool.category,
-      iconName: iconInfo.name, // Pass icon info
-      iconColor: iconInfo.color, // Pass icon info
+      id: assistant.id,
+      name: assistant.name,
+      avatar: assistant.image, // Keep image for Chat screen compatibility
+      description: assistant.description,
+      tags: assistant.tags,
+      category: assistant.category,
+      iconName: iconInfo.name,
+      iconColor: iconInfo.color,
     };
 
+    // Check for discount offer only for guest users
     if (isGuest) {
-      // For guest users, check if we should show the discount offer
       try {
         const shouldShow = await shouldShowDiscountOffer();
-        
         if (shouldShow) {
-          console.log('Showing discount offer screen');
-          // Mark that we've shown the offer today
+          console.log('Showing discount offer screen for guest');
           await markDiscountOfferShown();
-          // Navigate to discount offer screen
           navigation.navigate('DiscountOfferScreen', {
-            fromCharacter: true,
-            character: characterData // Pass character data with icon info
+            fromCharacter: true, // Indicate origin
+            character: characterData
           });
-          return;
+          return; // Stop execution if navigating to discount screen
         }
       } catch (error) {
-        console.error('Error checking discount offer status:', error);
+        // Log error but proceed to chat screen as a fallback
+        console.error('Error checking/showing discount offer:', error);
+        // Optionally use a logging service here: loggingService.error('Discount check failed', error);
       }
     }
-    
-    // Otherwise proceed to tool - map tool to character format
+
+    // Navigate to Chat screen for logged-in users or guests who didn't see the offer
     navigation.navigate('Chat', {
-      character: characterData // Pass character data with icon info
+      character: characterData
     });
-  };
+  }, [isGuest, navigation, shouldShowDiscountOffer, markDiscountOfferShown, colors.accent]); // Added dependencies
 
-  const navigateToProfile = () => {
-    navigation.navigate('Profile');
-  };
-
-  const navigateToHelpCenter = () => {
-    navigation.navigate('HelpCenter');
-  };
-
-  const focusSearchInput = () => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  };
-
-  const renderCategoryItem = ({ item }: { item: Category }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryItem,
-        { backgroundColor: item.selected ? colors.categorySelected : colors.categoryBg },
-        item.selected && styles.categoryItemSelected
-      ]}
-      onPress={() => handleCategoryPress(item.id)}
-    >
-      <Text 
-        style={[
-          styles.categoryText, 
-          { color: item.selected ? '#FFFFFF' : colors.subText },
-          item.selected && styles.categoryTextSelected
-        ]}
-      >
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+  // Filter assistants based on selected category and search query
+  const filteredAssistants = ASSISTANTS.filter(assistant =>
+    (selectedCategory === 'all' || assistant.category.toLowerCase() === selectedCategory.toLowerCase()) &&
+    (searchQuery === '' ||
+      assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      assistant.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      assistant.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
   );
 
-  // Define renderToolItem inside the component to access scope
-  const renderToolItem = ({ item }: { item: Tool }) => {
-    const iconInfo = TOOL_ICONS[item.id] || { name: 'help-circle-outline', color: colors.accent };
+  // Render function for category items (uses memoized component)
+  const renderCategoryItem = useCallback(({ item }: { item: Category }) => (
+    <CategoryButton
+      item={item}
+      isSelected={selectedCategory === item.id}
+      onPress={handleCategoryPress}
+      colors={colors}
+    />
+  ), [selectedCategory, handleCategoryPress, colors]); // Added dependencies
 
-    return (
-      <TouchableOpacity
-        style={[
-          styles.toolCard,
-          { width: COLUMN_WIDTH },
-          isDarkMode ? styles.darkCard : styles.lightCard
-        ]}
-        onPress={() => handleToolPress(item)}
-        activeOpacity={0.8}
-      >
-        {/* Icon Container */}
-        <View style={[styles.iconContainer, { backgroundColor: iconInfo.color }]}>
-          <Ionicons 
-            name={iconInfo.name} 
-            size={32} // Consistent icon size
-            color="#FFFFFF" // White icon color
-          />
-        </View>
-        
-        <View style={styles.toolInfo}>
-          <Text style={[styles.toolName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          
-          <Text style={[styles.toolDescription, { color: colors.subText }]} numberOfLines={2}>
-            {item.description}
-          </Text>
-          
-          {/* Tags and Meta removed */}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  // Render function for assistant items (uses memoized component)
+  const renderAssistantItem = useCallback(({ item }: { item: Assistant }) => (
+    <AssistantCard
+      item={item}
+      onPress={handleAssistantPress}
+      colors={{ text: colors.text, subText: colors.subText, accent: colors.accent }} // Pass accent color
+      isDarkMode={isDarkMode}
+    />
+  ), [handleAssistantPress, colors, isDarkMode]); // Added dependencies
 
-  const filteredTools = searchQuery 
-    ? TOOLS.filter(tool => 
-        (selectedCategory === 'all' || tool.category.toLowerCase() === selectedCategory.toLowerCase()) &&
-        (tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tool.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tool.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
-      )
-    : selectedCategory === 'all' 
-      ? TOOLS 
-      : TOOLS.filter(tool => tool.category.toLowerCase() === selectedCategory.toLowerCase());
+  // Component to render when the list is empty
+  const ListEmptyComponent = () => (
+    <View style={styles.emptyStateContainer}>
+      {/* Optional: Add an image here */}
+      {/* <Image source={require('../assets/empty-search.png')} style={styles.emptyStateImage} /> */}
+      <Text style={[styles.emptyStateTitle, { color: colors.text }]}>No Assistants Found</Text>
+      <Text style={[styles.emptyStateMessage, { color: colors.subText }]}>
+        {searchQuery
+          ? `Try adjusting your search query or selecting a different category.`
+          : `There are no assistants matching the selected category.`}
+      </Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      
+
+      {/* Header */}
       <View style={[styles.header, isDarkMode ? styles.darkHeader : styles.lightHeader]}>
         <View style={styles.headerLeft}>
-          {/* <Image source={require('../assets/logo.png')} style={styles.logo} /> */}
           <Text style={[styles.appName, isDarkMode ? styles.darkAppName : styles.lightAppName]}>
-            AI ChatBot {/* Updated Header Text */}
+            AI Assistants {/* Updated Header Text */}
           </Text>
         </View>
-        {/* Optional: Add settings/profile icon back if needed */}
-        {/* <TouchableOpacity onPress={navigateToProfile}>
-          <Ionicons name="person-circle-outline" size={30} color={colors.text} />
-        </TouchableOpacity> */}
+        {/* Removed unused profile icon */}
       </View>
-      
-      <View style={[styles.searchContainer, { backgroundColor: colors.searchBg }]}>
-        <Ionicons name="search-outline" size={18} color={colors.subText} style={{marginRight: 8}} />
+
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, isDarkMode ? styles.darkSearchContainer : styles.lightSearchContainer]}>
+        <Ionicons name="search-outline" size={18} color={colors.subText} style={styles.searchIconStyle} />
         <TextInput
-          ref={searchInputRef}
+          // ref={searchInputRef} // Ref removed as focus trigger is gone
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search AI assistants..." // Updated Placeholder
+          placeholder="Search AI assistants..."
           placeholderTextColor={colors.subText}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
+          <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search query">
             <Ionicons name="close-circle" size={18} color={colors.subText} />
           </TouchableOpacity>
         )}
       </View>
-      
+
+      {/* Categories */}
       <View style={styles.categoriesContainer}>
         <FlatList
-          data={categories}
+          data={INITIAL_CATEGORIES} // Use initial categories data
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id}
           horizontal
@@ -568,40 +594,41 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           contentContainerStyle={styles.categoriesList}
         />
       </View>
-      
+
+      {/* Assistants List */}
       <FlatList
-        data={filteredTools}
-        renderItem={renderToolItem} // Use the new renderToolItem
+        data={filteredAssistants}
+        renderItem={renderAssistantItem}
         keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.toolsList}
+        numColumns={NUM_COLUMNS}
+        contentContainerStyle={styles.assistantsList} // Renamed from toolsList
         showsVerticalScrollIndicator={false}
         columnWrapperStyle={styles.columnWrapper}
+        ListEmptyComponent={ListEmptyComponent} // Added empty state component
+        keyboardShouldPersistTaps="handled" // Dismiss keyboard on tap outside input
       />
     </SafeAreaView>
   );
 }
 
+// --- Styles ---
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // backgroundColor managed by theme
-  },
-  darkContainer: { // Keep for potential future use if needed elsewhere
-    backgroundColor: '#121212',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', // Changed to space-between if profile icon added back
+    justifyContent: 'space-between',
     paddingHorizontal: PADDING_HORIZONTAL,
-    paddingTop: 12, // Adjust as needed
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
   darkHeader: {
     borderBottomColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A', // Slightly different dark background for header
+    backgroundColor: '#1A1A1A',
   },
   lightHeader: {
     borderBottomColor: '#F0F0F0',
@@ -611,14 +638,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logo: { // Keep if logo is added back
-    width: 32,
-    height: 32,
-    marginRight: 8,
-  },
   appName: {
-    fontSize: 20, // Adjusted size
-    fontWeight: '600', // Adjusted weight
+    fontSize: 20,
+    fontWeight: '600',
   },
   darkAppName: {
     color: '#FFFFFF',
@@ -629,14 +651,14 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: PADDING_HORIZONTAL, // Use constant
+    marginHorizontal: PADDING_HORIZONTAL,
     marginTop: 16,
     marginBottom: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12, // Slightly less rounded
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#333333', // Default border, adjust if needed
+    // borderColor managed by theme styles
   },
   darkSearchContainer: {
     backgroundColor: '#2A2A2A',
@@ -646,26 +668,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderColor: '#EEEEEE',
   },
-  searchIcon: { // Keep if needed, though icon is directly in JSX now
+  searchIconStyle: { // Added specific style for margin
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-  },
-  darkSearchInput: { // Keep for potential theme adjustments
-    color: '#FFFFFF',
-  },
-  lightSearchInput: { // Keep for potential theme adjustments
-    color: '#000000',
-  },
-  categoriesList: {
-    paddingLeft: PADDING_HORIZONTAL,
-    paddingRight: PADDING_HORIZONTAL - 12, // Adjust for last item margin
-    marginBottom: 16,
+    // color managed by theme
   },
   categoriesContainer: {
-    // Removed as FlatList handles horizontal layout now
+    // No specific styles needed, FlatList handles layout
+  },
+  categoriesList: {
+    paddingHorizontal: PADDING_HORIZONTAL,
+    paddingBottom: 16, // Added padding bottom for spacing
   },
   categoryItem: {
     paddingHorizontal: 16,
@@ -674,7 +690,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   categoryItemSelected: {
-    // Can potentially merge with categoryItem if only background changes
+    // Specific styles for selected item if needed beyond background color
   },
   categoryText: {
     fontSize: 14,
@@ -683,99 +699,79 @@ const styles = StyleSheet.create({
   categoryTextSelected: {
     fontWeight: '600', // Make selected bolder
   },
-  toolsList: {
+  assistantsList: { // Renamed from toolsList
     paddingHorizontal: PADDING_HORIZONTAL,
-    paddingBottom: 24,
+    paddingBottom: 24, // Ensure content doesn't hide behind potential tab bar
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    // Removed paddingHorizontal, handled by toolsList padding and GAP
+    marginBottom: GAP, // Apply gap between rows here
   },
-  toolCard: {
-    marginBottom: GAP, // Use GAP constant
+  assistantCard: { // Renamed from toolCard
+    // marginBottom handled by columnWrapper
     borderRadius: 16,
-    overflow: 'hidden', // Keep overflow hidden
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
-    // Width is set dynamically
+    shadowRadius: 2.22,
+    elevation: 3,
     alignItems: 'flex-start', // Align content to the start
+    width: '100%', // Ensure card takes full column width allocated
   },
   darkCard: {
     backgroundColor: '#1E1E1E',
-    borderWidth: 1, // Add subtle border in dark mode
-    borderColor: '#2A2A2A',
   },
   lightCard: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 1, // Add subtle border in light mode
+    borderWidth: 1,
     borderColor: '#F0F0F0',
   },
-  iconContainer: { // Style for the new icon container
-    width: 56, // Match reference image size
+  iconContainer: {
+    width: 56,
     height: 56,
-    borderRadius: 12, // Rounded square
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    // alignSelf: 'flex-start', // Align icon to the start of the card
-    margin: 14, // Add margin around the icon container
-    marginBottom: 8, // Reduced bottom margin
+    margin: 14,
+    marginBottom: 8,
   },
-  toolInfo: {
-    paddingHorizontal: 14, // Horizontal padding
-    paddingBottom: 14, // Bottom padding
-    paddingTop: 0, // Remove top padding as icon is above
-    alignSelf: 'stretch', // Ensure info takes full width below icon
+  assistantInfo: { // Renamed from toolInfo
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 0,
+    alignSelf: 'stretch', // Ensure it takes width
   },
-  toolName: {
-    fontSize: 16, // Slightly smaller font size
-    fontWeight: '600', // Medium weight
-    marginBottom: 4,
-    textAlign: 'left', // Align text left
+  assistantName: { // Renamed from toolName
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 5,
+    textAlign: 'left',
   },
-  toolDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'left', // Align text left
-    // Removed marginBottom
+  assistantDescription: { // Renamed from toolDescription
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'left',
   },
-  // Removed unused styles: toolImageContainer, toolImage, categoryTag, categoryTagText, tagsContainer, tagItem, tagText, toolMeta, followerCount, followerText, chatButton, chatButtonText
   emptyStateContainer: {
-    flex: 1,
+    flex: 1, // Take remaining space if list is short
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    marginTop: 40, // Add some margin from categories
-  },
-  emptyStateImage: { // Keep if you add an image later
-    width: 120,
-    height: 120,
-    marginBottom: 20,
-    opacity: 0.7,
+    marginTop: 40, // Add space from categories/search
+    minHeight: 200, // Ensure it has some minimum height
   },
   emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 10,
+    fontSize: 18, // Adjusted size
+    fontWeight: '600', // Adjusted weight
+    marginBottom: 8, // Adjusted spacing
     textAlign: 'center',
   },
   emptyStateMessage: {
-    fontSize: 16,
+    fontSize: 14, // Adjusted size
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 24,
+    lineHeight: 20, // Adjusted line height
+    // color managed by theme
   },
-  actionButton: { // Keep if needed for empty state
-    backgroundColor: '#0070F3',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-  },
-  actionButtonText: { // Keep if needed for empty state
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  // Removed unused styles: actionButton, actionButtonText, toolImageContainer, etc.
 });

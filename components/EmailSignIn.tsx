@@ -20,75 +20,112 @@ import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+// import { logError } from '../services/loggingService'; // Assuming a logging service exists
+const logError = (message: string, error?: any) => console.error(message, error); // Placeholder
 
-// Define types for navigation and route props
-type EmailSignInProps = {
-  navigation: {
-    goBack: () => void;
-    navigate: (screen: string, params?: any) => void;
-  };
+// Placeholder for navigation types - should be defined centrally
+type RootStackParamList = {
+  [key: string]: any; // Allow other routes
+};
+
+// Constants
+const FADE_ANIMATION_DURATION = 800;
+const SHAKE_ANIMATION_DURATION = 50;
+const MIN_PASSWORD_LENGTH = 6;
+
+// Define interfaces for navigation and component props
+interface EmailSignInProps {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
   route?: {
     params?: {
       isSignUp?: boolean;
     };
   };
-};
+}
 
 const { width } = Dimensions.get('window');
 
-export default function EmailSignIn({ navigation, route }: EmailSignInProps) {
+// --- Helper Functions ---
+
+// Convert technical error messages to user-friendly ones
+const beautifyErrorMessage = (errorMsg: string): string => {
+  if (errorMsg.includes('invalid login credentials')) {
+    return 'Incorrect email or password. Please try again.';
+  }
+  if (errorMsg.includes('already registered')) {
+    return 'Email already in use. Try signing in instead.';
+  }
+  if (errorMsg.includes('network')) {
+    return 'Network error. Please check your connection.';
+  }
+  if (errorMsg.includes('Rate')) {
+    return 'Too many attempts. Please try again later.';
+  }
+  // Consider adding more specific checks based on observed errors
+  return 'An unexpected error occurred. Please try again.'; // Generic fallback
+};
+
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePassword = (password: string): boolean => {
+  return password.length >= MIN_PASSWORD_LENGTH;
+};
+
+// --- Theme Colors (defined outside component) ---
+const getThemeColors = (isDarkMode: boolean) => ({
+  background: isDarkMode ? '#121212' : '#FFFFFF',
+  card: isDarkMode ? '#1A1A1A' : '#F8F8F8',
+  text: isDarkMode ? '#FFFFFF' : '#000000',
+  subText: isDarkMode ? '#AAAAAA' : '#666666',
+  inputBg: isDarkMode ? '#222222' : '#F5F5F5',
+  inputText: isDarkMode ? '#FFFFFF' : '#000000',
+  inputPlaceholder: isDarkMode ? '#777777' : '#AAAAAA',
+  inputBorder: isDarkMode ? '#333333' : '#E5E5E5',
+  buttonBg: isDarkMode ? '#333333' : '#000000',
+  buttonText: isDarkMode ? '#FFFFFF' : '#FFFFFF',
+  buttonDisabled: isDarkMode ? '#222222' : '#CCCCCC',
+  error: '#FF3B30', // iOS red
+  success: '#34C759', // iOS green
+  accent: '#007AFF', // iOS blue
+});
+
+// --- Main Component ---
+
+function EmailSignInComponent({ navigation, route }: EmailSignInProps) {
   // Get initial mode from route params or default to signin
   const initialMode = route?.params?.isSignUp ? 'signup' : 'signin';
   const { signIn, signUp } = useAuth();
   const { isDarkMode } = useContext(ThemeContext);
+  const colors = getThemeColors(isDarkMode); // Get themed colors
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState(initialMode);
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [showSuccess, setShowSuccess] = useState(false);
 
   // Animation values
   const fadeAnim = useState(new Animated.Value(0))[0];
   const shakeAnim = useState(new Animated.Value(0))[0];
 
-  // Theme colors
-  const colors = {
-    background: isDarkMode ? '#121212' : '#FFFFFF',
-    card: isDarkMode ? '#1A1A1A' : '#F8F8F8',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    subText: isDarkMode ? '#AAAAAA' : '#666666',
-    inputBg: isDarkMode ? '#222222' : '#F5F5F5',
-    inputText: isDarkMode ? '#FFFFFF' : '#000000',
-    inputPlaceholder: isDarkMode ? '#777777' : '#AAAAAA',
-    inputBorder: isDarkMode ? '#333333' : '#E5E5E5',
-    buttonBg: isDarkMode ? '#333333' : '#000000',
-    buttonText: isDarkMode ? '#FFFFFF' : '#FFFFFF',
-    buttonDisabled: isDarkMode ? '#222222' : '#CCCCCC',
-    error: '#FF3B30', // iOS red
-    success: '#34C759', // iOS green
-    accent: '#007AFF', // iOS blue
-  };
+  // Removed internal colors object, now fetched via getThemeColors
 
   useEffect(() => {
     // Fade in animation for form
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 800,
+      duration: FADE_ANIMATION_DURATION,
       useNativeDriver: true,
     }).start();
   }, []);
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePassword = (password: string) => {
-    return password.length >= 6;
-  };
+  // Validation functions moved outside component
 
   const clearInputs = () => {
     setEmail('');
@@ -98,10 +135,10 @@ export default function EmailSignIn({ navigation, route }: EmailSignInProps) {
 
   const shakeError = () => {
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+      Animated.timing(shakeAnim, { toValue: 10, duration: SHAKE_ANIMATION_DURATION, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: SHAKE_ANIMATION_DURATION, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: SHAKE_ANIMATION_DURATION, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: SHAKE_ANIMATION_DURATION, useNativeDriver: true })
     ]).start();
   };
 
@@ -162,34 +199,16 @@ export default function EmailSignIn({ navigation, route }: EmailSignInProps) {
         shakeError();
       }
     } catch (err) {
-      console.error('Auth error:', err);
-      setError(
-        typeof err === 'string'
-          ? beautifyErrorMessage(err)
-          : `Unable to ${mode === 'signin' ? 'sign in' : 'sign up'} at this time. Please try again later.`
-      );
+      const errorToLog = err instanceof Error ? err : new Error(String(err));
+      logError(`Auth error during ${mode}:`, errorToLog);
+      setError(beautifyErrorMessage(errorToLog.message || 'An unknown error occurred.'));
       shakeError();
     } finally {
       setLoading(false);
     }
   };
 
-  // Convert technical error messages to user-friendly ones
-  const beautifyErrorMessage = (errorMsg: string): string => {
-    if (errorMsg.includes('invalid login credentials')) {
-      return 'Incorrect email or password. Please try again.';
-    }
-    if (errorMsg.includes('already registered')) {
-      return 'Email already in use. Try signing in instead.';
-    }
-    if (errorMsg.includes('network')) {
-      return 'Network error. Please check your connection.';
-    }
-    if (errorMsg.includes('Rate')) {
-      return 'Too many attempts. Please try again later.';
-    }
-    return errorMsg;
-  };
+  // beautifyErrorMessage moved outside component
 
   const toggleMode = () => {
     setMode(mode === 'signin' ? 'signup' : 'signin');
@@ -242,98 +261,60 @@ export default function EmailSignIn({ navigation, route }: EmailSignInProps) {
                     : 'Join the conversation with AI characters'}
                 </Text>
 
-                {error && (
-                  <View style={[styles.errorContainer, { backgroundColor: isDarkMode ? 'rgba(255, 59, 48, 0.1)' : 'rgba(255, 59, 48, 0.05)' }]}>
-                    <Ionicons name="alert-circle" size={20} color={colors.error} />
-                    <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
-                  </View>
-                )}
+                {/* Error and Success Messages */}
+                <ErrorMessageDisplay error={error} colors={colors} isDarkMode={isDarkMode} />
+                <SuccessMessageDisplay showSuccess={showSuccess} colors={colors} isDarkMode={isDarkMode} />
 
-                {showSuccess && (
-                  <View style={[styles.successContainer, { backgroundColor: isDarkMode ? 'rgba(52, 199, 89, 0.1)' : 'rgba(52, 199, 89, 0.05)' }]}>
-                    <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                    <Text style={[styles.successText, { color: colors.success }]}>
-                      Account created successfully! Please check your email for confirmation.
-                    </Text>
-                  </View>
-                )}
+                {/* Email Input */}
+                <AuthInput
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  icon="mail-outline"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  colors={colors}
+                />
 
-                <View style={styles.inputContainer}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Email</Text>
-                  <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                    <Ionicons name="mail-outline" size={20} color={colors.subText} style={styles.inputIcon} />
-                    <TextInput
-                      style={[styles.input, { color: colors.inputText }]}
-                      placeholder="Enter your email"
-                      placeholderTextColor={colors.inputPlaceholder}
-                      value={email}
-                      onChangeText={setEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Password</Text>
-                  <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                    <Ionicons name="lock-closed-outline" size={20} color={colors.subText} style={styles.inputIcon} />
-                    <TextInput
-                      style={[styles.input, { color: colors.inputText }]}
-                      placeholder="Enter your password"
-                      placeholderTextColor={colors.inputPlaceholder}
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                    />
-                  </View>
-                </View>
+                {/* Password Input */}
+                <AuthInput
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  icon="lock-closed-outline"
+                  secureTextEntry
+                  colors={colors}
+                />
 
                 {mode === 'signup' && (
-                  <View style={styles.inputContainer}>
-                    <Text style={[styles.inputLabel, { color: colors.text }]}>Confirm Password</Text>
-                    <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
-                      <Ionicons name="lock-closed-outline" size={20} color={colors.subText} style={styles.inputIcon} />
-                      <TextInput
-                        style={[styles.input, { color: colors.inputText }]}
-                        placeholder="Confirm your password"
-                        placeholderTextColor={colors.inputPlaceholder}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        secureTextEntry
-                      />
-                    </View>
-                  </View>
+                  <AuthInput
+                    label="Confirm Password"
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="Confirm your password"
+                    icon="lock-closed-outline"
+                    secureTextEntry
+                    colors={colors}
+                  />
                 )}
 
-                <TouchableOpacity
-                  style={[
-                    styles.submitButton, 
-                    { backgroundColor: loading ? colors.buttonDisabled : colors.buttonBg }
-                  ]}
+                {/* Submit Button */}
+                <AuthButton
+                  title={mode === 'signin' ? 'Sign In' : 'Create Account'}
                   onPress={handleSubmit}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>
-                      {mode === 'signin' ? 'Sign In' : 'Create Account'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                  loading={loading}
+                  colors={colors}
+                />
 
-                <View style={styles.switchModeContainer}>
-                  <Text style={[styles.switchModeText, { color: colors.subText }]}>
-                    {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
-                  </Text>
-                  <TouchableOpacity onPress={toggleMode}>
-                    <Text style={[styles.switchModeLink, { color: colors.accent }]}>
-                      {mode === 'signin' ? 'Sign Up' : 'Sign In'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                {/* Mode Toggle */}
+                <AuthModeToggle
+                  mode={mode}
+                  onToggle={toggleMode}
+                  colors={colors}
+                />
               </Animated.View>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -342,6 +323,110 @@ export default function EmailSignIn({ navigation, route }: EmailSignInProps) {
     </View>
   );
 }
+
+// --- Subcomponents ---
+
+interface AuthInputProps extends React.ComponentProps<typeof TextInput> {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  colors: ReturnType<typeof getThemeColors>;
+}
+
+const AuthInput: React.FC<AuthInputProps> = ({ label, icon, colors, ...props }) => (
+  <View style={styles.inputContainer}>
+    <Text style={[styles.inputLabel, { color: colors.text }]}>{label}</Text>
+    <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+      <Ionicons name={icon} size={20} color={colors.subText} style={styles.inputIcon} />
+      <TextInput
+        style={[styles.input, { color: colors.inputText }]}
+        placeholderTextColor={colors.inputPlaceholder}
+        {...props}
+      />
+    </View>
+  </View>
+);
+
+interface AuthButtonProps {
+  title: string;
+  onPress: () => void;
+  loading: boolean;
+  colors: ReturnType<typeof getThemeColors>;
+}
+
+const AuthButton: React.FC<AuthButtonProps> = ({ title, onPress, loading, colors }) => (
+  <TouchableOpacity
+    style={[
+      styles.submitButton,
+      { backgroundColor: loading ? colors.buttonDisabled : colors.buttonBg }
+    ]}
+    onPress={onPress}
+    disabled={loading}
+    activeOpacity={0.7}
+  >
+    {loading ? (
+      <ActivityIndicator color={colors.buttonText} size="small" />
+    ) : (
+      <Text style={[styles.submitButtonText, { color: colors.buttonText }]}>
+        {title}
+      </Text>
+    )}
+  </TouchableOpacity>
+);
+
+interface AuthModeToggleProps {
+  mode: 'signin' | 'signup';
+  onToggle: () => void;
+  colors: ReturnType<typeof getThemeColors>;
+}
+
+const AuthModeToggle: React.FC<AuthModeToggleProps> = ({ mode, onToggle, colors }) => (
+  <View style={styles.switchModeContainer}>
+    <Text style={[styles.switchModeText, { color: colors.subText }]}>
+      {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
+    </Text>
+    <TouchableOpacity onPress={onToggle}>
+      <Text style={[styles.switchModeLink, { color: colors.accent }]}>
+        {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+      </Text>
+    </TouchableOpacity>
+  </View>
+);
+
+interface ErrorMessageDisplayProps {
+  error: string | null;
+  colors: ReturnType<typeof getThemeColors>;
+  isDarkMode: boolean;
+}
+
+const ErrorMessageDisplay: React.FC<ErrorMessageDisplayProps> = ({ error, colors, isDarkMode }) => {
+  if (!error) return null;
+  return (
+    <View style={[styles.errorContainer, { backgroundColor: isDarkMode ? 'rgba(255, 59, 48, 0.1)' : 'rgba(255, 59, 48, 0.05)' }]}>
+      <Ionicons name="alert-circle-outline" size={20} color={colors.error} />
+      <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+    </View>
+  );
+};
+
+interface SuccessMessageDisplayProps {
+  showSuccess: boolean;
+  colors: ReturnType<typeof getThemeColors>;
+  isDarkMode: boolean;
+}
+
+const SuccessMessageDisplay: React.FC<SuccessMessageDisplayProps> = ({ showSuccess, colors, isDarkMode }) => {
+  if (!showSuccess) return null;
+  return (
+    <View style={[styles.successContainer, { backgroundColor: isDarkMode ? 'rgba(52, 199, 89, 0.1)' : 'rgba(52, 199, 89, 0.05)' }]}>
+      <Ionicons name="checkmark-circle-outline" size={20} color={colors.success} />
+      <Text style={[styles.successText, { color: colors.success }]}>
+        Account created! Check your email for confirmation.
+      </Text>
+    </View>
+  );
+};
+
+// --- Styles ---
 
 const styles = StyleSheet.create({
   container: {
@@ -396,8 +481,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   errorText: {
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: 15, // Slightly larger for readability
+    marginLeft: 10,
     fontWeight: '500',
     flex: 1,
   },
@@ -409,8 +494,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   successText: {
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: 15, // Slightly larger for readability
+    marginLeft: 10,
     fontWeight: '500',
     flex: 1,
   },
@@ -474,4 +559,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
-}); 
+});
+
+// --- Exports ---
+export { EmailSignInComponent as EmailSignIn }; // Named export
+export default EmailSignInComponent; // Default export

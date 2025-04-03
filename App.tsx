@@ -1,20 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react'; // Removed unused useState
 import { NavigationContainer, DefaultTheme, DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
-import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack'; // Added NativeStackNavigationProp
-import { createBottomTabNavigator, BottomTabNavigationProp } from '@react-navigation/bottom-tabs'; // Added BottomTabNavigationProp
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator, BottomTabNavigationProp } from '@react-navigation/bottom-tabs'; // Keep BottomTabNavigationProp for ProfileTabWithReset
 import { StatusBar } from 'expo-status-bar';
 import {
-  ActivityIndicator, 
-  View, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  Image, 
-  ScrollView, 
-  useColorScheme,
+  ActivityIndicator,
+  View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   useWindowDimensions,
-  SafeAreaView,
-  Button,
   Alert
 } from 'react-native';
 import { AuthContextProvider, useAuth } from './contexts/AuthContext';
@@ -24,19 +19,18 @@ import LoginScreen from './components/LoginScreen';
 import EmailSignIn from './components/EmailSignIn';
 import HomeScreen from './components/HomeScreen';
 import ChatScreen from './components/ChatScreen';
-import ProfileScreen from './components/ProfileScreen';
-import EditProfileScreen from './components/EditProfileScreen';
-import SettingsScreen from './components/SettingsScreen';
-import PrivacySettingsScreen from './components/PrivacySettingsScreen';
-import NotificationSettingsScreen from './components/NotificationSettingsScreen';
-import SecuritySettingsScreen from './components/SecuritySettingsScreen';
+import { ProfileScreen } from './components/ProfileScreen'; // Use named import
+import { EditProfileScreen } from './components/EditProfileScreen'; // Use named import
+import SettingsScreen from './components/SettingsScreen'; // Assuming this uses default export
+import { PrivacySettingsScreen } from './components/PrivacySettingsScreen'; // Use named import
+import { NotificationSettingsScreen } from './components/NotificationSettingsScreen'; // Use named import
+import { SecuritySettingsScreen } from './components/SecuritySettingsScreen'; // Use named import
 import FAQsScreen from './components/FAQsScreen';
-import ReportProblemScreen from './components/ReportProblemScreen'; 
+import ReportProblemScreen from './components/ReportProblemScreen';
 import HelpCenterScreen from './components/HelpCenterScreen';
 import ContactUsScreen from './components/ContactUsScreen';
 import OnboardingScreen from './components/OnboardingScreen';
 import * as SplashScreen from 'expo-splash-screen';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ThemeProvider, ThemeContext } from './contexts/ThemeContext';
 import SubscriptionScreen from './components/SubscriptionScreen';
 import SubscriptionOfferScreen from './components/SubscriptionOfferScreen';
@@ -53,7 +47,7 @@ type RootStackParamList = {
   EmailSignIn: { isSignUp?: boolean };
   MainTabs: undefined;
   Onboarding: undefined;
-  Chat: { character: any };
+  Chat: { character: any }; // Consider defining a Character type later
   EditProfile: undefined;
   Settings: undefined;
   PrivacySettings: undefined;
@@ -114,21 +108,26 @@ function MainTabNavigator() {
 
   return (
     <Tab.Navigator
-      id={undefined}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
+          // Define icon names based on route and focus state
+          let iconName: keyof typeof Ionicons.glyphMap; // Use keyof glyphMap for type safety
 
-          if (route.name === 'HomeTab') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'ChatTab') {
-            iconName = focused ? 'chatbubble' : 'chatbubble-outline';
-          } else if (route.name === 'ProfileTab') {
-            iconName = focused ? 'person' : 'person-outline';
+          switch (route.name) {
+            case 'HomeTab':
+              iconName = focused ? 'home' : 'home-outline';
+              break;
+            case 'ChatTab':
+              iconName = focused ? 'chatbubble' : 'chatbubble-outline';
+              break;
+            case 'ProfileTab':
+              iconName = focused ? 'person' : 'person-outline';
+              break;
+            default:
+              iconName = 'alert-circle-outline'; // Fallback icon
           }
 
-          // Cast iconName to any to satisfy Ionicons type temporarily
-          return <Ionicons name={iconName as any} size={size} color={color} />;
+          return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: 'gray',
@@ -146,19 +145,19 @@ function MainTabNavigator() {
         headerShown: false,
       })}
     >
-      <Tab.Screen 
-        name="HomeTab" 
-        component={HomeScreen} 
+      <Tab.Screen
+        name="HomeTab"
+        component={HomeScreen}
         options={{ title: 'Home' }}
       />
-      <Tab.Screen 
-        name="ChatTab" 
-        component={ChatListScreen} 
+      <Tab.Screen
+        name="ChatTab"
+        component={ChatListScreen}
         options={{ title: 'Chat' }}
       />
-      <Tab.Screen 
-        name="ProfileTab" 
-        component={ProfileTabWithReset} 
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileTabWithReset}
         options={{ title: 'Profile' }}
       />
     </Tab.Navigator>
@@ -168,11 +167,12 @@ function MainTabNavigator() {
 // Define navigation prop type for ProfileTabWithReset
 type ProfileTabNavigationProp = BottomTabNavigationProp<MainTabsParamList, 'ProfileTab'>;
 
-// Wrapper for ProfileScreen that includes reset onboarding button
+// Wrapper for ProfileScreen that includes a development-only reset onboarding button.
+// TODO: Consider moving this to a separate file (e.g., components/profile/ProfileTabContainer.tsx) later.
 function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationProp }) {
   const { resetOnboarding } = useOnboarding();
   const { isDarkMode } = React.useContext(ThemeContext);
-  
+
   const handleResetOnboarding = () => {
     Alert.alert(
       "Reset Onboarding",
@@ -182,8 +182,8 @@ function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationP
           text: "Cancel",
           style: "cancel"
         },
-        { 
-          text: "Reset", 
+        {
+          text: "Reset",
           onPress: async () => {
             await resetOnboarding();
             Alert.alert("Success", "Onboarding has been reset. Restart the app to see the onboarding screens.");
@@ -193,16 +193,17 @@ function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationP
       ]
     );
   };
-  
+
   return (
     <View style={{ flex: 1 }}>
-      <ProfileScreen navigation={navigation} route={{key: 'ProfileTab', name: 'ProfileTab', params: undefined}} />
-      <View style={[styles.resetButtonContainer, { backgroundColor: isDarkMode ? '#121212' : '#FFFFFF' }]}>
+      {/* Pass navigation prop; route prop might not be strictly necessary if ProfileScreen doesn't use it directly */}
+      <ProfileScreen navigation={navigation} route={{ key: 'ProfileTab', name: 'ProfileTab', params: undefined }} />
+      <View style={[styles.resetButtonContainer, { backgroundColor: isDarkMode ? DarkTheme.colors.background : LightTheme.colors.background, borderTopColor: isDarkMode ? DarkTheme.colors.border : LightTheme.colors.border }]}>
         <TouchableOpacity
-          style={[styles.resetButton, { backgroundColor: isDarkMode ? '#333333' : '#F0F0F0' }]}
+          style={[styles.resetButton, { backgroundColor: isDarkMode ? DarkTheme.colors.card : LightTheme.colors.border }]}
           onPress={handleResetOnboarding}
         >
-          <Text style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }}>Reset Onboarding (Dev Only)</Text>
+          <Text style={{ color: isDarkMode ? DarkTheme.colors.text : LightTheme.colors.text }}>Reset Onboarding (Dev Only)</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -214,10 +215,10 @@ const Navigation = () => {
   const { hasCompletedOnboarding } = useOnboarding();
   const { isDarkMode } = React.useContext(ThemeContext);
   const { width } = useWindowDimensions();
-  
+
   useEffect(() => {
     if (!loading) {
-      SplashScreen.hideAsync().catch(e => console.log('SplashScreen hide error:', e));
+      SplashScreen.hideAsync().catch(e => console.warn('SplashScreen hide error:', e)); // Use console.warn
     }
   }, [loading]);
 
@@ -234,25 +235,24 @@ const Navigation = () => {
   const commonHeaderStyle = {
     headerStyle: {
       backgroundColor: theme.colors.card,
-      elevation: 0, // Remove shadow on Android
-      shadowOpacity: 0, // Remove shadow on iOS
     },
     headerTitleStyle: {
       color: theme.colors.text,
-      fontWeight: '500' as const, // Type assertion to fix TypeScript error
+      fontWeight: '500' as const,
       fontSize: Math.min(18, width * 0.045),
     },
     headerTintColor: theme.colors.text,
-    headerShadowVisible: false, // Remove the bottom border
+    headerShadowVisible: false, // Prefer this over shadowOpacity/elevation
     headerBackTitleVisible: false, // iOS only: hide the back button title
   };
 
   return (
     <NavigationContainer theme={theme}>
+      {/* Conditional rendering based on Auth and Onboarding state */}
       {!user && !isGuest ? (
+        // === Authentication Flow ===
         <Stack.Navigator
-          id={undefined}
-          screenOptions={{ 
+          screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: theme.colors.background },
             animation: 'fade',
@@ -262,111 +262,109 @@ const Navigation = () => {
           <Stack.Screen name="EmailSignIn" component={EmailSignIn} />
         </Stack.Navigator>
       ) : !hasCompletedOnboarding ? (
-        <Stack.Navigator 
-          id={undefined}
-          screenOptions={{ 
+        // === Onboarding Flow ===
+        <Stack.Navigator
+          screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: theme.colors.background },
             animation: 'fade',
           }}
         >
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         </Stack.Navigator>
       ) : (
-        <Stack.Navigator 
-          id={undefined}
-          screenOptions={{ 
+        // === Main Application Flow ===
+        <Stack.Navigator
+          screenOptions={{
             headerShown: false, // Default to no header for the MainTabs
             contentStyle: { backgroundColor: theme.colors.background },
-            animation: 'fade',
+            animation: 'fade', // Consider 'slide_from_right' for standard screen transitions
           }}
         >
-          <Stack.Screen 
-            name="MainTabs" 
-            component={MainTabNavigator} 
-            options={{ headerShown: false }} 
+          <Stack.Screen
+            name="MainTabs"
+            component={MainTabNavigator}
+            // No options needed as header is handled by the Stack default
           />
-          <Stack.Screen 
-            name="Chat" 
+          <Stack.Screen
+            name="Chat"
             component={ChatScreen}
-            options={({ route }) => ({ // Restore function structure
-              // Use the header defined within ChatScreen.tsx itself
+            options={{
+              // Header is handled within ChatScreen itself
               headerShown: false,
-              // Keep title logic in case needed elsewhere, though header is hidden
-              title: route.params?.character?.name || 'Chat',
-            })}
+            }}
           />
-          <Stack.Screen 
-            name="EditProfile" 
-            component={EditProfileScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="EditProfile"
+            component={EditProfileScreen}
+            options={{
+              headerShown: true,
               title: 'Edit Profile',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="Settings" 
-            component={SettingsScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{
+              headerShown: true,
               title: 'Settings',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="PrivacySettings" 
-            component={PrivacySettingsScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="PrivacySettings"
+            component={PrivacySettingsScreen}
+            options={{
+              headerShown: true,
               title: 'Privacy',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="NotificationSettings" 
-            component={NotificationSettingsScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="NotificationSettings"
+            component={NotificationSettingsScreen}
+            options={{
+              headerShown: true,
               title: 'Notifications',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="SecuritySettings" 
-            component={SecuritySettingsScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="SecuritySettings"
+            component={SecuritySettingsScreen}
+            options={{
+              headerShown: true,
               title: 'Security',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="FAQs" 
-            component={FAQsScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="FAQs"
+            component={FAQsScreen}
+            options={{
+              headerShown: true,
               title: 'FAQs',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="ReportProblem" 
-            component={ReportProblemScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="ReportProblem"
+            component={ReportProblemScreen}
+            options={{
+              headerShown: true,
               title: 'Report a Problem',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="HelpCenter" 
-            component={HelpCenterScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="HelpCenter"
+            component={HelpCenterScreen}
+            options={{
+              headerShown: true,
               title: 'Help Center',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
           <Stack.Screen
             name="ContactUs"
@@ -395,24 +393,24 @@ const Navigation = () => {
               ...commonHeaderStyle,
             }}
           />
-          <Stack.Screen 
-            name="SubscriptionScreen" 
-            component={SubscriptionScreen} 
-            options={{ 
-              headerShown: true, 
+          <Stack.Screen
+            name="SubscriptionScreen"
+            component={SubscriptionScreen}
+            options={{
+              headerShown: true,
               title: 'Premium Plans',
               ...commonHeaderStyle,
-            }} 
+            }}
           />
-          <Stack.Screen 
-            name="SubscriptionOfferScreen" 
-            component={SubscriptionOfferScreen} 
-            options={{ headerShown: false }} 
+          <Stack.Screen
+            name="SubscriptionOfferScreen"
+            component={SubscriptionOfferScreen}
+            options={{ headerShown: false }}
           />
-          <Stack.Screen 
-            name="DiscountOfferScreen" 
-            component={DiscountOfferScreen} 
-            options={{ headerShown: false }} 
+          <Stack.Screen
+            name="DiscountOfferScreen"
+            component={DiscountOfferScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       )}
@@ -420,6 +418,7 @@ const Navigation = () => {
   );
 };
 
+// Root component providing context providers
 export default function App() {
   return (
     <ThemeProvider>
@@ -432,9 +431,10 @@ export default function App() {
   );
 }
 
+// Component rendering Navigation and StatusBar, consuming ThemeContext
 function AppContent() {
   const { isDarkMode } = React.useContext(ThemeContext);
-  
+
   return (
     <>
       <Navigation />
@@ -444,131 +444,24 @@ function AppContent() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
+  // Styles used in this file
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: '500',
-    marginBottom: 20,
-  },
-  instructionText: {
-    fontSize: 16,
-    color: '#666666',
-    marginBottom: 40,
-    textAlign: 'center',
-  },
-  signOutButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  signOutText: {
-    fontWeight: '500',
-    fontSize: 16,
-  },
-  characterButton: {
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  characterButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  // Styles for ChatListScreen
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '600',
-    marginBottom: 16,
-    marginLeft: 4,
-  },
-  chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  chatInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  chatName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  chatMessage: {
-    fontSize: 14,
-  },
-  chatTime: {
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  // Trending characters styles
-  trendingScrollContainer: {
-    paddingVertical: 10,
-  },
-  trendingItemHorizontal: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  trendingAvatar: {
-    marginBottom: 12,
-  },
-  trendingName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  trendingDesc: {
-    fontSize: 13,
-    textAlign: 'center',
-  },
+  // Styles for ProfileTabWithReset's dev button
   resetButtonContainer: {
-    padding: 16,
-    alignItems: 'center',
+    padding: 15,
     borderTopWidth: 1,
-    borderTopColor: '#CCCCCC',
+    // Theme-dependent border/background colors applied inline using ThemeContext
   },
   resetButton: {
     paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    // Theme-dependent background color applied inline using ThemeContext
   },
-}); 
+});

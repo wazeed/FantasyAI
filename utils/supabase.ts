@@ -1,53 +1,29 @@
 import 'react-native-url-polyfill/auto';
-import { createClient, Provider } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
+import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Database } from '../types/database'; // Use relative path for database types
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-  console.warn('Falling back to hardcoded Supabase credentials');
+// Validate environment variables
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl) {
+  throw new Error("Missing environment variable: EXPO_PUBLIC_SUPABASE_URL");
+}
+if (!supabaseAnonKey) {
+  throw new Error("Missing environment variable: EXPO_PUBLIC_SUPABASE_ANON_KEY");
 }
 
-// Use environment variables or hardcoded values for development
-const supabaseUrl = process.env.SUPABASE_URL || "https://jphpomjcsnqyiliphmcs.supabase.co";
-const supabaseKey = process.env.SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwaHBvbWpjc25xeWlsaXBobWNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMxMTQ5NzYsImV4cCI6MjA1ODY5MDk3Nn0.MxS3pbhH9oGSDF-uUH3E4NSPO58W_VIW-kx8Yukslfw";
-
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+// Initialize the Supabase client for React Native
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: true,
-    detectSessionInUrl: false,
+    storage: AsyncStorage, // Use AsyncStorage for session persistence in React Native
     autoRefreshToken: true,
-    debug: __DEV__
-  }
+    persistSession: true,
+    detectSessionInUrl: false, // Important for React Native
+    // debug: __DEV__, // Optional: enable debug logs in development
+  },
 });
 
-export type AuthProvider = Provider;
-
-export const signInWithEmail = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
-};
-
-export const signUpWithEmail = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
-};
-
-export const signInWithProvider = async (provider: Provider) => {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
-  });
-  if (error) throw error;
-  return data;
-};
-
-export const AuthProvider = {
-  GOOGLE: 'google' as Provider,
-  APPLE: 'apple' as Provider,
-};
+// Note: Auth-related functions (signIn, signUp, etc.) have been removed
+// as they should reside in a dedicated authentication service (e.g., services/authService.ts).

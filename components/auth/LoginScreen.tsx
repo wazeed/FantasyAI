@@ -1,16 +1,19 @@
-import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   Image,
-  SafeAreaView 
+  SafeAreaView,
+  ImageBackground,
+  Animated,
+  ImageSourcePropType, // Import ImageSourcePropType
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 interface AuthButtonProps {
-  icon: any;
+  icon: ImageSourcePropType; // Use specific type
   label: string;
   onPress: () => void;
 }
@@ -26,25 +29,75 @@ const AuthButton = ({ icon, label, onPress }: AuthButtonProps) => (
 );
 
 export default function LoginScreen() {
+  // Animation setup for avatars
+  const avatarAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0)
+  ]).current;
+
+  useEffect(() => {
+    const createFloatAnimation = (animValue: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(animValue, {
+            toValue: -10, // Float up
+            duration: 3000 + Math.random() * 1000,
+            delay: delay,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: 0, // Float down
+            duration: 3000 + Math.random() * 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    };
+
+    const animations = avatarAnims.map((anim, index) => createFloatAnimation(anim, index * 500));
+    Animated.parallel(animations).start();
+
+    // Cleanup function to stop animations when the component unmounts
+    return () => animations.forEach(anim => anim.stop());
+  }, [avatarAnims]);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
-      
-      {/* Floating Character Avatars */}
-      <View style={styles.avatarContainer}>
-        <Image 
-          source={require('../../assets/char1.png')} 
-          style={[styles.avatar, { top: '10%', left: '20%' }]} 
-        />
-        <Image 
-          source={require('../../assets/char2.png')} 
-          style={[styles.avatar, { top: '30%', right: '15%' }]} 
-        />
-        <Image 
-          source={require('../../assets/char3.png')} 
-          style={[styles.avatar, { bottom: '25%', left: '30%' }]} 
-        />
-      </View>
+    <ImageBackground
+      source={require('../../assets/chat-bg/pattern2.png')} // Example: Use stars pattern
+      style={styles.background}
+      imageStyle={styles.backgroundImage} // Style for the image itself
+    >
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        
+        {/* Floating Character Avatars - Apply animation */}
+        <View style={styles.avatarContainer}>
+          <Animated.Image
+            source={require('../../assets/char1.png')}
+            style={[
+              styles.avatar,
+              { top: '10%', left: '20%' },
+              { transform: [{ translateY: avatarAnims[0] }] } // Apply animation
+            ]}
+          />
+          <Animated.Image
+            source={require('../../assets/char2.png')}
+            style={[
+              styles.avatar,
+              { top: '30%', right: '15%' },
+              { transform: [{ translateY: avatarAnims[1] }] } // Apply animation
+            ]}
+          />
+          <Animated.Image
+            source={require('../../assets/char3.png')}
+            style={[
+              styles.avatar,
+              { bottom: '25%', left: '30%' },
+              { transform: [{ translateY: avatarAnims[2] }] } // Apply animation
+            ]}
+          />
+        </View>
 
       {/* Main Title */}
       <View style={styles.titleContainer}>
@@ -77,14 +130,22 @@ export default function LoginScreen() {
         <Text style={styles.linkText}>Terms</Text> and acknowledge our{' '}
         <Text style={styles.linkText}>Privacy Policy</Text>
       </Text>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+  },
+  backgroundImage: {
+    opacity: 0.1, // Make background subtle
+  },
   container: {
     flex: 1,
-    backgroundColor: '#1A1A1A',
+    // Remove solid background color to let ImageBackground show
+    // backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 40,
@@ -105,10 +166,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32, // Increase font size
     color: 'white',
-    fontWeight: '600',
+    fontWeight: '700', // Bolder weight
     textAlign: 'center',
+    // Add a subtle text shadow for depth
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   buttonContainer: {
     width: '100%',
@@ -118,20 +183,32 @@ const styles = StyleSheet.create({
   authButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)', // Slightly transparent white
+    paddingVertical: 14, // Adjust padding
+    paddingHorizontal: 20,
+    borderRadius: 16, // Slightly more rounded
     width: '100%',
+    // Add a subtle shadow for depth
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   buttonIcon: {
     width: 24,
     height: 24,
-    marginRight: 12,
+    marginRight: 12, // Keep adjusted spacing
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
+    color: '#333', // Slightly softer dark color
+    fontWeight: '600', // Make slightly bolder
+    flex: 1, // Allow text to take remaining space
+    textAlign: 'center', // Center text within the button
   },
   termsText: {
     fontSize: 12,

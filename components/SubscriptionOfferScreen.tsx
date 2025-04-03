@@ -11,18 +11,36 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { StackNavigationProp } from '@react-navigation/stack'; // Assuming Stack is used here, not NativeStack
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
+// Placeholder for navigation types - should be defined centrally
+type RootStackParamList = {
+  SubscriptionScreen: { isSpecialOffer: boolean };
+  [key: string]: any; // Allow other routes
+};
+
 const { width } = Dimensions.get('window');
 
-const SubscriptionOfferScreen = () => {
-  const navigation = useNavigation<StackNavigationProp<any>>();
-  const { isDarkMode } = useContext(ThemeContext);
+// --- Constants ---
+const INITIAL_MINUTES = 52;
+const FEATURES = [
+  { icon: 'infinite-outline' as keyof typeof Ionicons.glyphMap, text: 'Unlimited answers from AI' },
+  { icon: 'people-outline' as keyof typeof Ionicons.glyphMap, text: 'Access to all AI characters' },
+  { icon: 'create-outline' as keyof typeof Ionicons.glyphMap, text: 'Create your own chatbots' },
+  { icon: 'flash-outline' as keyof typeof Ionicons.glyphMap, text: 'Powered by ChatGPT & GPT-4' },
+];
+
+// --- Main Component ---
+
+const SubscriptionOfferScreen: React.FC = () => {
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  // isDarkMode is fetched but not used, styles are hardcoded for this screen's design.
+  // const { isDarkMode } = useContext(ThemeContext);
   
-  // Countdown timer (52 minutes)
-  const [minutes, setMinutes] = useState(52);
+  // Countdown timer
+  const [minutes, setMinutes] = useState(INITIAL_MINUTES);
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
@@ -48,21 +66,9 @@ const SubscriptionOfferScreen = () => {
     navigation.goBack();
   };
 
-  // Dynamic colors based on theme
-  const colors = {
-    background: isDarkMode ? '#121212' : '#FFFFFF',
-    text: isDarkMode ? '#FFFFFF' : '#333333',
-    subText: isDarkMode ? '#AAAAAA' : '#666666',
-    card: isDarkMode ? '#1E1E1E' : '#F5F5F5',
-    primary: '#4F46E5',
-    secondary: '#8B5CF6',
-    accent: '#EC4899',
-    success: '#10B981',
-  };
-
-  const gradientColors = isDarkMode 
-    ? ['#4F46E5', '#8B5CF6', '#EC4899'] 
-    : ['#4F46E5', '#8B5CF6', '#EC4899'];
+  // Gradient colors are hardcoded, assuming intentional design for this specific offer screen.
+  const gradientColors = ['#4F46E5', '#8B5CF6', '#EC4899'] as const;
+  // Removed unused 'colors' object derived from ThemeContext.
 
   return (
     <LinearGradient
@@ -89,37 +95,16 @@ const SubscriptionOfferScreen = () => {
           <Text style={styles.discountSubtext}>For a limited time only</Text>
         </View>
 
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerLabel}>Offer expires in:</Text>
-          <View style={styles.timerValue}>
-            <Text style={styles.timerText}>
-              {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
-            </Text>
-          </View>
-        </View>
+        {/* Countdown Timer */}
+        <CountdownTimerDisplay minutes={minutes} seconds={seconds} />
 
         <View style={styles.featuresContainer}>
           <Text style={styles.featuresTitle}>Get Premium and unlock:</Text>
           
-          <View style={styles.featureItem}>
-            <Ionicons name="infinite-outline" size={24} color="white" style={styles.featureIcon} />
-            <Text style={styles.featureText}>Unlimited answers from AI</Text>
-          </View>
-          
-          <View style={styles.featureItem}>
-            <Ionicons name="people-outline" size={24} color="white" style={styles.featureIcon} />
-            <Text style={styles.featureText}>Access to all AI characters</Text>
-          </View>
-          
-          <View style={styles.featureItem}>
-            <Ionicons name="create-outline" size={24} color="white" style={styles.featureIcon} />
-            <Text style={styles.featureText}>Create your own chatbots</Text>
-          </View>
-          
-          <View style={styles.featureItem}>
-            <Ionicons name="flash-outline" size={24} color="white" style={styles.featureIcon} />
-            <Text style={styles.featureText}>Powered by ChatGPT & GPT-4</Text>
-          </View>
+          {/* Feature List */}
+          {FEATURES.map((feature, index) => (
+            <FeatureItem key={index} icon={feature.icon} text={feature.text} />
+          ))}
         </View>
 
         <TouchableOpacity 
@@ -243,4 +228,36 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SubscriptionOfferScreen; 
+// --- Subcomponents ---
+
+interface CountdownTimerDisplayProps {
+  minutes: number;
+  seconds: number;
+}
+
+const CountdownTimerDisplay: React.FC<CountdownTimerDisplayProps> = React.memo(({ minutes, seconds }) => (
+  <View style={styles.timerContainer}>
+    <Text style={styles.timerLabel}>Offer expires in:</Text>
+    <View style={styles.timerValue}>
+      <Text style={styles.timerText}>
+        {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
+      </Text>
+    </View>
+  </View>
+));
+
+interface FeatureItemProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+}
+
+const FeatureItem: React.FC<FeatureItemProps> = React.memo(({ icon, text }) => (
+  <View style={styles.featureItem}>
+    <Ionicons name={icon} size={24} color="white" style={styles.featureIcon} />
+    <Text style={styles.featureText}>{text}</Text>
+  </View>
+));
+
+// --- Exports ---
+export { SubscriptionOfferScreen }; // Named export
+export default SubscriptionOfferScreen;

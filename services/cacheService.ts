@@ -1,171 +1,215 @@
+// import { logError } from './loggingService'; // Assuming loggingService exports logError after its refactor
+
+/**
+ * Interface for items stored in the cache.
+ */
 interface CacheItem<T> {
   data: T;
-  expiresAt: number;
+  expiresAt: number; // Timestamp in milliseconds
 }
 
-export class CacheService {
-  private static instance: CacheService;
-  private cache: Map<string, CacheItem<any>>;
-  private readonly defaultTTL: number;
+// Module-level cache instance
+const cache = new Map<string, CacheItem<any>>();
 
-  private constructor(defaultTTLMinutes: number = 5) {
-    this.cache = new Map();
-    this.defaultTTL = defaultTTLMinutes * 60 * 1000; // Convert to milliseconds
+// Default Time-To-Live for cache items in milliseconds (default: 5 minutes)
+const DEFAULT_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Calculates the expiration timestamp.
+ * @param ttlMinutes Optional TTL in minutes. Uses default if not provided.
+ * @returns Expiration timestamp in milliseconds.
+ */
+function calculateExpiresAt(ttlMinutes?: number): number {
+  const ttlMs = ttlMinutes ? ttlMinutes * 60 * 1000 : DEFAULT_TTL_MS;
+  return Date.now() + ttlMs;
+}
+
+/**
+ * Checks if a cache item is expired and deletes it if it is.
+ * @param key The cache key.
+ * @param item The cache item.
+ * @returns True if the item is valid (exists and not expired), false otherwise.
+ */
+function isItemValid<T>(key: string, item: CacheItem<T> | undefined): item is CacheItem<T> {
+  if (!item) {
+    return false;
+  }
+  if (Date.now() > item.expiresAt) {
+    cache.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Sets a value in the cache with an optional Time-To-Live (TTL).
+ * @param key The key to store the value under.
+ * @param value The value to store.
+ * @param ttlMinutes Optional TTL in minutes. Uses default if not provided.
+ */
+export function setCacheItem<T>(key: string, value: T, ttlMinutes?: number): void {
+  const expiresAt = calculateExpiresAt(ttlMinutes);
+  cache.set(key, { data: value, expiresAt });
+}
+
+/**
+ * Retrieves a value from the cache. Returns null if the key doesn't exist or the item is expired.
+ * @param key The key of the item to retrieve.
+ * @returns The cached value or null.
+ */
+export function getCacheItem<T>(key: string): T | null {
+  const item = cache.get(key);
+  if (!isItemValid(key, item)) {
+    return null;
+  }
+  return item.data as T;
+}
+
+/**
+ * Retrieves a value from the cache. If the value is not found or expired,
+ * it computes the value using the provided async function, stores it in the cache,
+ * and then returns it.
+ * @param key The key of the item to retrieve or compute.
+ * @param computeFn An async function that computes the value if not found in cache.
+ * @param ttlMinutes Optional TTL in minutes for the newly computed item.
+ * @returns The cached or computed value, or null if computation fails.
+ */
+export async function getOrComputeCacheItem<T>(
+  key: string,
+  computeFn: () => Promise<T>,
+  ttlMinutes?: number
+): Promise<T | null> {
+  const cachedValue = getCacheItem<T>(key);
+  if (cachedValue !== null) {
+    return cachedValue;
   }
 
-  public static getInstance(): CacheService {
-    if (!CacheService.instance) {
-      CacheService.instance = new CacheService();
+  try {
+    const computedValue = await computeFn();
+    // Avoid caching null/undefined values explicitly, let computeFn decide
+    if (computedValue !== null && computedValue !== undefined) {
+      setCacheItem(key, computedValue, ttlMinutes);
     }
-    return CacheService.instance;
+    return computedValue;
+  } catch (error) {
+    // Use the logging service (assuming it's refactored)
+    // logError('Error computing value for cache', { error, key });
+    console.error('Error computing value for cache:', { error, key }); // Kept for fallback if loggingService is not ready
+    return null;
   }
+}
 
-  /**
-   * Set a value in the cache with optional TTL
-   */
-  public set<T>(key: string, value: T, ttlMinutes?: number): void {
-    const expiresAt = Date.now() + (ttlMinutes ? ttlMinutes * 60 * 1000 : this.defaultTTL);
-    this.cache.set(key, {
-      data: value,
-      expiresAt
-    });
-  }
+/**
+ * Deletes a specific item from the cache.
+ * @param key The key of the item to delete.
+ */
+export function deleteCacheItem(key: string): void {
+  cache.delete(key);
+}
 
-  /**
-   * Get a value from the cache
-   */
-  public get<T>(key: string): T | null {
-    const item = this.cache.get(key);
-    
-    if (!item) {
-      return null;
-    }
-
-    if (Date.now() > item.expiresAt) {
-      this.cache.delete(key);
-      return null;
-    }
-
-    return item.data as T;
-  }
-
-  /**
-   * Get a value from cache or compute it if not present
-   */
-  public async getOrCompute<T>(
-    key: string,
-    compute: () => Promise<T>,
-    ttlMinutes?: number
-  ): Promise<T | null> {
-    const cachedValue = this.get<T>(key);
-    if (cachedValue !== null) {
-      return cachedValue;
-    }
-
-    try {
-      const computedValue = await compute();
-      if (computedValue !== null) {
-        this.set(key, computedValue, ttlMinutes);
-      }
-      return computedValue;
-    } catch (error) {
-      console.error('Error computing value for cache:', error);
-      return null;
+/**
+ * Clears all expired items from the cache.
+ * Iterates through the cache and removes items whose expiration time has passed.
+ */
+export function clearExpiredCacheItems(): void {
+  const now = Date.now();
+  for (const [key, item] of cache.entries()) {
+    if (now > item.expiresAt) {
+      cache.delete(key);
     }
   }
+}
 
-  /**
-   * Delete a value from the cache
-   */
-  public delete(key: string): void {
-    this.cache.delete(key);
-  }
+/**
+ * Clears the entire cache, removing all items regardless of their expiration status.
+ */
+export function clearAllCache(): void {
+  cache.clear();
+}
 
-  /**
-   * Clear all expired items from the cache
-   */
-  public clearExpired(): void {
-    const now = Date.now();
-    for (const [key, item] of this.cache.entries()) {
-      if (now > item.expiresAt) {
-        this.cache.delete(key);
-      }
+/**
+ * Retrieves multiple items from the cache based on an array of keys.
+ * @param keys An array of keys to retrieve.
+ * @returns A Map where keys are the requested cache keys and values are the found items.
+ *          Items that are not found or expired are omitted.
+ */
+export function getManyCacheItems<T>(keys: string[]): Map<string, T> {
+  const result = new Map<string, T>();
+  keys.forEach(key => {
+    const value = getCacheItem<T>(key);
+    if (value !== null) {
+      result.set(key, value);
     }
-  }
+  });
+  return result;
+}
 
-  /**
-   * Clear the entire cache
-   */
-  public clear(): void {
-    this.cache.clear();
-  }
+/**
+ * Sets multiple items in the cache.
+ * @param items A Map where keys are the cache keys and values are the items to store.
+ * @param ttlMinutes Optional TTL in minutes, applied to all items being set.
+ */
+export function setManyCacheItems<T>(items: Map<string, T>, ttlMinutes?: number): void {
+  items.forEach((value, key) => {
+    setCacheItem(key, value, ttlMinutes);
+  });
+}
 
-  /**
-   * Get multiple values from cache
-   */
-  public getMany<T>(keys: string[]): Map<string, T> {
-    const result = new Map<string, T>();
-    keys.forEach(key => {
-      const value = this.get<T>(key);
-      if (value !== null) {
-        result.set(key, value);
-      }
-    });
-    return result;
-  }
+/**
+ * Checks if a key exists in the cache and the corresponding item is not expired.
+ * @param key The key to check.
+ * @returns True if the key exists and the item is valid, false otherwise.
+ */
+export function hasCacheItem(key: string): boolean {
+  const item = cache.get(key);
+  return isItemValid(key, item);
+}
 
-  /**
-   * Set multiple values in cache
-   */
-  public setMany<T>(items: Map<string, T>, ttlMinutes?: number): void {
-    items.forEach((value, key) => {
-      this.set(key, value, ttlMinutes);
-    });
-  }
+/**
+ * Gets statistics about the cache.
+ * @returns An object containing the total number of items and the count of expired items.
+ */
+export function getCacheStats(): { size: number; expiredCount: number } {
+  let expiredCount = 0;
+  const now = Date.now();
 
-  /**
-   * Check if a key exists and is not expired
-   */
-  public has(key: string): boolean {
-    const item = this.cache.get(key);
-    if (!item) {
-      return false;
+  cache.forEach(item => {
+    if (now > item.expiresAt) {
+      expiredCount++;
     }
-    if (Date.now() > item.expiresAt) {
-      this.cache.delete(key);
-      return false;
-    }
-    return true;
+  });
+
+  return {
+    size: cache.size,
+    expiredCount,
+  };
+}
+
+// Store the interval ID for potential cleanup later
+let cleanupIntervalId: NodeJS.Timer | null = null;
+
+/**
+ * Starts an interval timer to automatically clear expired cache items periodically.
+ * @param intervalMinutes The interval in minutes between cleanup runs. Defaults to 30 minutes.
+ * @returns The NodeJS.Timer object for the interval.
+ */
+export function startCacheCleanupInterval(intervalMinutes: number = 30): NodeJS.Timer {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId as any); // Clear existing interval if any (cast to any for type compatibility)
   }
+  const intervalMs = intervalMinutes * 60 * 1000;
+  cleanupIntervalId = setInterval(() => {
+    clearExpiredCacheItems();
+  }, intervalMs);
+  return cleanupIntervalId;
+}
 
-  /**
-   * Get cache stats
-   */
-  public getStats(): {
-    size: number;
-    expired: number;
-  } {
-    let expired = 0;
-    const now = Date.now();
-    
-    this.cache.forEach(item => {
-      if (now > item.expiresAt) {
-        expired++;
-      }
-    });
-
-    return {
-      size: this.cache.size,
-      expired
-    };
-  }
-
-  /**
-   * Start automatic cache cleanup
-   */
-  public startCleanupInterval(intervalMinutes: number = 30): NodeJS.Timer {
-    return setInterval(() => {
-      this.clearExpired();
-    }, intervalMinutes * 60 * 1000);
+/**
+ * Stops the automatic cache cleanup interval.
+ */
+export function stopCacheCleanupInterval(): void {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId as any); // Cast to any for type compatibility
+    cleanupIntervalId = null;
   }
 }

@@ -1,5 +1,4 @@
 import { supabase } from '../utils/supabase';
-import { User } from '@supabase/supabase-js';
 // Import the specific Profile type generated from the schema
 import { Database } from '../types/database'; // Assuming this is the main export
 
@@ -8,10 +7,11 @@ type Profile = Database['public']['Tables']['profiles']['Row'];
 // Define Profile update type based on generated types
 type ProfileUpdate = Database['public']['Tables']['profiles']['Update'];
 
-// Removed CacheService and DatabaseService imports as we'll use supabase client directly
-
 /**
  * Get the user profile directly from Supabase.
+ * Returns the profile if found, null if not found or on error.
+ * @param userId - The ID of the user whose profile is to be fetched.
+ * @returns A promise that resolves to the user's profile or null.
  */
 export const getUserProfile = async (userId: string): Promise<Profile | null> => {
   try {
@@ -21,26 +21,26 @@ export const getUserProfile = async (userId: string): Promise<Profile | null> =>
       .eq('id', userId)
       .single(); // Use single() as 'id' is the primary key
 
-    if (error && error.code !== 'PGRST116') { // PGRST116: No rows found, which is okay if profile not created yet
-      console.error('Error fetching user profile:', error);
-      throw error;
+    // Handle potential errors
+    if (error && error.code !== 'PGRST116') { // PGRST116: No rows found (expected if profile doesn't exist yet)
+      console.error('Error fetching user profile:', error.message);
+      return null; // Return null on unexpected errors
     }
 
+    // 'data' will be null if no row is found (PGRST116 or simply no match)
     return data;
   } catch (error) {
-    console.error('Error in getUserProfile:', error);
+    // Catch any unexpected errors during the operation execution
+    console.error('Unexpected error in getUserProfile:', error instanceof Error ? error.message : error);
     return null;
   }
 };
 
 /**
- * createUserProfile is no longer needed here as the handle_new_user trigger
- * in schema.sql automatically creates a profile row upon user signup.
- */
-// export const createUserProfile = async (user: User): Promise<Profile | null> => { ... };
-
-/**
  * Update a user profile in the 'profiles' table.
+ * @param userId - The ID of the user whose profile is to be updated.
+ * @param updates - An object containing the profile fields to update.
+ * @returns A promise that resolves to the updated profile or null on error.
  */
 export const updateUserProfile = async (
   userId: string,
@@ -55,96 +55,19 @@ export const updateUserProfile = async (
       .select() // Select the updated row
       .single(); // Expecting a single row back
 
+    // Handle potential errors during the update operation
     if (error) {
-      console.error('Error updating user profile:', error);
-      throw error;
+      console.error('Error updating user profile:', error.message);
+      return null; // Return null on error
     }
 
-    // No need to manually update cache for now
-    // if (data) {
-    //   cache.set(`user:${userId}`, data, USER_CACHE_TTL);
-    // }
-
-    return data;
+    return data; // Return the updated profile data
   } catch (error) {
-    console.error('Error in updateUserProfile:', error);
+    // Catch any unexpected errors during the operation execution
+    console.error('Unexpected error in updateUserProfile:', error instanceof Error ? error.message : error);
     return null;
   }
 };
 
-/**
- * Update user preferences - Commented out for now, needs review based on schema
- */
-/*
-export const updateUserPreferences = async (
-  userId: string,
-  preferences: Record<string, any>
-): Promise<boolean> => {
-  try {
-    // This needs adjustment if 'preferences' column doesn't exist or has a different structure
-    const { data: profile, error: updateError } = await supabase
-      .from('profiles')
-      .update({ preferences: preferences as Json }) // Cast might be needed depending on final type
-      .eq('id', userId)
-      .select('id') // Only select id to confirm update
-      .single();
-
-    if (updateError) throw updateError;
-
-    return !!profile; // Return true if update was successful
-
-  } catch (error) {
-    console.error('Error updating user preferences:', error);
-    return false;
-  }
-};
-*/
-
-/**
- * Search users - Commented out for now, needs review based on schema/requirements
- */
-/*
-export const searchUsers = async (options?: QueryOptions) => {
-  // This needs adjustment to query 'profiles' table and handle options correctly
-  // return DatabaseService.query('profiles', options);
-  console.warn('searchUsers function needs implementation for profiles table');
-  return [];
-};
-*/
-
-/**
- * Delete user and all associated data - Commented out, requires careful handling
- */
-/*
-export const deleteUser = async (userId: string): Promise<boolean> => {
-  try {
-    // Deleting from auth.users should cascade delete the profile due to FOREIGN KEY constraint
-    // However, deleting via admin API is safer and cleaner
-    const { error: adminError } = await supabase.auth.admin.deleteUser(userId);
-
-    if (adminError) {
-      console.error('Error deleting user from auth:', adminError);
-      // Attempt to delete from profiles table as fallback? Risky.
-      // const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
-      // if (profileError) {
-      //   console.error('Error deleting profile directly:', profileError);
-      //   throw adminError; // Re-throw original error
-      // }
-      throw adminError;
-    }
-
-    // Clear cache if used
-    // cache.delete(`user:${userId}`);
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting user:', error);
-    return false;
-  }
-};
-*/
-
-// Removed cache initialization and cleanup interval
-// const cache = CacheService.getInstance();
-// const USER_CACHE_TTL = 5;
-// cache.startCleanupInterval(30);
+// Note: createUserProfile is handled by the handle_new_user trigger in schema.sql.
+// Note: updateUserPreferences, searchUsers, deleteUser functions were removed as they were commented out and not implemented.

@@ -1,14 +1,94 @@
 import { supabase } from '../utils/supabase';
-import { Database, DatabaseError, QueryOptions, PaginatedResult, TableNames } from '../types/database';
+// Assuming Database type is correctly defined and exported from ../types/database
+import { Database } from '../types/database';
+import { PostgrestError } from '@supabase/supabase-js';
+
+// --- Local Type Definitions (Removed - Using Global Types Now) ---
+// Local TableNames, GetRowType, GetInsertType, GetUpdateType removed.
+
+// Define DatabaseError structure
+export interface DatabaseError {
+  code: string;
+  message: string;
+  details?: any;
+  hint?: string;
+  rawError?: unknown;
+}
+
+// Define Filter structure
+export interface Filter {
+  column: string;
+  operator: string;
+  value: any;
+}
+
+// Define OrderBy structure
+export interface OrderBy {
+  column: string;
+  direction: 'asc' | 'desc';
+}
+
+// Define QueryOptions structure
+export interface QueryOptions {
+  filters?: Filter[];
+  orderBy?: OrderBy;
+  limit?: number;
+  offset?: number;
+}
+
+// Define PaginatedResult structure
+export interface PaginatedResult<T> {
+  data: T[];
+  count: number;
+  hasMore: boolean;
+}
+
+// --- Conditional Helper Types (Removed - Using Global Types Directly) ---
+
+
+// --- Helper Function for Error Creation ---
+
+function createDatabaseError(error: unknown, context: string): DatabaseError {
+  if (typeof error === 'object' && error !== null && 'code' in error && 'message' in error) {
+    const pgError = error as PostgrestError;
+    return {
+      code: pgError.code || 'UNKNOWN_DB_ERROR',
+      message: pgError.message || `Failed ${context}`,
+      details: pgError.details || 'No details provided.',
+      hint: pgError.hint || 'No hint provided.',
+      rawError: error,
+    };
+  }
+  if (error instanceof Error) {
+    return {
+      code: 'CLIENT_ERROR',
+      message: error.message || `Failed ${context}`,
+      details: error.stack || 'No stack trace available.',
+      hint: 'Check application code or network.',
+      rawError: error,
+    };
+  }
+  return {
+    code: 'UNKNOWN_ERROR',
+    message: `An unknown error occurred while ${context}`,
+    details: String(error),
+    hint: 'Unknown error source.',
+    rawError: error,
+  };
+}
+
+
+// --- DatabaseService Class ---
 
 export class DatabaseService {
   /**
-   * Generic fetch function for getting a single record by ID
+   * Generic fetch function for getting a single record by ID.
+   * Throws DatabaseError on failure or if record not found.
    */
-  static async getById<T extends TableNames>(
+  static async getById<T extends keyof Database['public']['Tables']>(
     table: T,
     id: string
-  ): Promise<Database['public']['Tables'][T]['Row'] | null> {
+  ): Promise<Database['public']['Tables'][T]['Row']> {
     try {
       const { data, error } = await supabase
         .from(table)
@@ -17,117 +97,115 @@ export class DatabaseService {
         .single();
 
       if (error) throw error;
-      return data;
+      if (!data) throw new Error(`Record not found in ${table} with ID ${id}`);
+
+      // Cast needed as Supabase client might return a more specific type than Record<string, any>
+      // Cast should align with the specific table's Row type
+      return data as unknown as Database['public']['Tables'][T]['Row']; // Cast via unknown
     } catch (error) {
-      console.error(`Error fetching ${table} by ID:`, error);
-      return null;
+      throw createDatabaseError(error, `fetching ${table} by ID ${id}`);
     }
   }
 
   /**
-   * Generic fetch function with pagination and filtering
+   * Generic fetch function with pagination and filtering.
+   * Throws DatabaseError on failure.
    */
-  static async query<T extends TableNames>(
+  static async query<T extends keyof Database['public']['Tables']>(
     table: T,
     options?: QueryOptions
   ): Promise<PaginatedResult<Database['public']['Tables'][T]['Row']>> {
     try {
-      let query = supabase.from(table).select('*', { count: 'exact' });
+      let queryBuilder = supabase.from(table).select('*', { count: 'exact' });
 
-      // Apply filters if provided
       if (options?.filters) {
-        options.filters.forEach(filter => {
-          query = query.filter(filter.column, filter.operator, filter.value);
+        options.filters.forEach((filter: Filter) => {
+          queryBuilder = queryBuilder.filter(filter.column, filter.operator, filter.value);
         });
       }
 
-      // Apply ordering
       if (options?.orderBy) {
-        query = query.order(options.orderBy.column, {
+        queryBuilder = queryBuilder.order(options.orderBy.column, {
           ascending: options.orderBy.direction === 'asc'
         });
       }
 
-      // Apply pagination
-      if (options?.limit) {
-        query = query.range(
-          options.offset || 0,
-          (options.offset || 0) + options.limit - 1
-        );
-      }
+      const limit = options?.limit ?? 20;
+      const offset = options?.offset ?? 0;
+      queryBuilder = queryBuilder.range(offset, offset + limit - 1);
 
-      const { data, error, count } = await query;
+      const { data, error, count } = await queryBuilder;
 
       if (error) throw error;
 
+      const totalCount = count || 0;
+      const returnedData = (data || []) as unknown as Database['public']['Tables'][T]['Row'][]; // Cast via unknown
+
       return {
-        data: data || [],
-        count: count || 0,
-        hasMore: count ? (options?.offset || 0) + (options?.limit || 0) < count : false
+        data: returnedData,
+        count: totalCount,
+        hasMore: totalCount > offset + returnedData.length
       };
     } catch (error) {
-      console.error(`Error querying ${table}:`, error);
-      return {
-        data: [],
-        count: 0,
-        hasMore: false
-      };
+      throw createDatabaseError(error, `querying ${table}`);
     }
   }
 
   /**
-   * Generic insert function
+   * Generic insert function.
+   * Throws DatabaseError on failure.
    */
-  static async insert<T extends TableNames>(
+  static async insert<T extends keyof Database['public']['Tables']>(
     table: T,
-    data: Omit<Database['public']['Tables'][T]['Row'], 'id' | 'created_at' | 'updated_at'> & Partial<Pick<Database['public']['Tables'][T]['Row'], 'id'>>
-  ): Promise<Database['public']['Tables'][T]['Row'] | null> {
+    insertData: Database['public']['Tables'][T]['Insert']
+  ): Promise<Database['public']['Tables'][T]['Row']> {
     try {
       const { data: result, error } = await supabase
         .from(table)
-        .insert(data)
+        .insert(insertData) // Use direct type, Supabase client should handle it
         .select()
         .single();
 
       if (error) throw error;
-      return result;
+      if (!result) throw new Error(`Insert operation into ${table} did not return data.`);
+
+      return result as unknown as Database['public']['Tables'][T]['Row']; // Cast via unknown
     } catch (error) {
-      console.error(`Error inserting into ${table}:`, error);
-      return null;
+      throw createDatabaseError(error, `inserting into ${table}`);
     }
   }
 
   /**
-   * Generic update function
+   * Generic update function.
+   * Throws DatabaseError on failure.
    */
-  static async update<T extends TableNames>(
+  static async update<T extends keyof Database['public']['Tables']>(
     table: T,
     id: string,
-    data: Partial<Omit<Database['public']['Tables'][T]['Row'], 'id' | 'created_at' | 'updated_at'>>
-  ): Promise<Database['public']['Tables'][T]['Row'] | null> {
+    updateData: Database['public']['Tables'][T]['Update']
+  ): Promise<Database['public']['Tables'][T]['Row']> {
     try {
       const { data: result, error } = await supabase
         .from(table)
-        .update({
-          ...data,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData) // Use direct type, Supabase client should handle it
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
-      return result;
+      if (!result) throw new Error(`Update operation on ${table} with ID ${id} did not return data.`);
+
+      return result as unknown as Database['public']['Tables'][T]['Row']; // Cast via unknown
     } catch (error) {
-      console.error(`Error updating ${table}:`, error);
-      return null;
+      throw createDatabaseError(error, `updating ${table} with ID ${id}`);
     }
   }
 
   /**
-   * Generic delete function
+   * Generic delete function.
+   * Throws DatabaseError on failure.
    */
-  static async delete<T extends TableNames>(
+  static async delete<T extends keyof Database['public']['Tables']>(
     table: T,
     id: string
   ): Promise<boolean> {
@@ -138,62 +216,52 @@ export class DatabaseService {
         .eq('id', id);
 
       if (error) throw error;
+
       return true;
     } catch (error) {
-      console.error(`Error deleting from ${table}:`, error);
-      return false;
+      throw createDatabaseError(error, `deleting from ${table} with ID ${id}`);
     }
   }
 
   /**
-   * Function to handle database errors
+   * Function to handle/format database errors (exported for potential external use).
    */
   static handleError(error: unknown): DatabaseError {
-    if (error instanceof Error) {
-      return {
-        code: 'UNKNOWN_ERROR',
-        message: error.message,
-        details: error
-      };
-    }
-    
-    if (typeof error === 'object' && error !== null) {
-      const { code, message, details, hint } = error as any;
-      return {
-        code: code || 'UNKNOWN_ERROR',
-        message: message || 'An unknown error occurred',
-        details,
-        hint
-      };
-    }
-
-    return {
-      code: 'UNKNOWN_ERROR',
-      message: 'An unknown error occurred',
-      details: error
-    };
+      return createDatabaseError(error, 'processing database operation');
   }
 
   /**
-   * Execute a function within a transaction
+   * Execute a callback function within a database transaction using Supabase RPC.
+   * Throws DatabaseError on failure.
    */
   static async transaction<T>(
     callback: () => Promise<T>
-  ): Promise<T | null> {
+  ): Promise<T> {
+    let transactionStarted = false;
     try {
-      const { data, error } = await supabase.rpc('begin_transaction');
-      if (error) throw error;
+      const { error: beginError } = await supabase.rpc('begin_transaction');
+      if (beginError) throw createDatabaseError(beginError, 'beginning transaction');
+      transactionStarted = true;
 
       const result = await callback();
 
       const { error: commitError } = await supabase.rpc('commit_transaction');
-      if (commitError) throw commitError;
+      if (commitError) throw createDatabaseError(commitError, 'committing transaction');
 
       return result;
     } catch (error) {
-      console.error('Transaction error:', error);
-      await supabase.rpc('rollback_transaction');
-      return null;
+      if (transactionStarted) {
+        try {
+          await supabase.rpc('rollback_transaction');
+        } catch (rollbackError) {
+          console.error('Failed to rollback transaction:', createDatabaseError(rollbackError, 'rolling back transaction'));
+        }
+      }
+      if (typeof error === 'object' && error !== null && 'code' in error && 'message' in error && 'rawError' in error) {
+          throw error;
+      } else {
+          throw createDatabaseError(error, 'executing transaction callback');
+      }
     }
   }
 }
