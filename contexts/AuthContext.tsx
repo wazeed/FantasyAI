@@ -67,35 +67,13 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
           }
         }
 
-        // 2. Check local storage for guest status (only if no session)
-        if (!currentSession) {
-          if (isMounted) setIsGuest(false); // Default to false if no session initially
-          try {
-            const guestMode = await AsyncStorage.getItem('guest_mode');
-            if (guestMode === 'true') {
-              // Set to true ONLY if confirmed by storage
-              if (isMounted) {
-                setIsGuest(true);
-
-                // Load guest message count
-                const countStr = await AsyncStorage.getItem(GUEST_MESSAGE_COUNT_KEY);
-                if (countStr) { // No need for isMounted check here as it's within the outer isMounted block implicitly
-                  setGuestMessageCount(parseInt(countStr, 10));
-                }
-
-                // Load if subscription offer has been shown
-                const offerShownString = await AsyncStorage.getItem(OFFER_SHOWN_KEY);
-                setOfferShown(offerShownString === 'true'); // No need for isMounted check
-
-                // Removed loading of last discount date as it's unused
-              }
-            }
-            // No 'else' needed here, as we defaulted to false above
-          } catch (storageError) {
-            console.error("Error reading guest_mode from AsyncStorage:", storageError);
-            // Ensure isGuest remains false in case of storage error
-            if (isMounted) setIsGuest(false);
-          }
+        // 2. Ensure guest state is false initially if no session
+        // Guest mode is only entered explicitly via skipAuth function
+        if (!currentSession && isMounted) {
+            setIsGuest(false);
+            // Reset guest-related state just in case (though skipAuth should handle this)
+            setGuestMessageCount(0);
+            setOfferShown(false);
         }
       } catch (error) {
         console.error('Error during auth initialization:', error);
