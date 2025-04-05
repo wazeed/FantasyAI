@@ -1,20 +1,29 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+// Use NativeStackNavigationProp as defined in the central types
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+// Import the centrally defined RootStackParamList
+import { RootStackParamList } from '../../types/navigation'; // Using relative path
 
-type RootStackParamList = {
-  SignIn: undefined;
-  SignUp: undefined;
-};
+// Specific navigation prop type for this screen, using the imported types
+// Note: WelcomeScreen itself isn't listed in RootStackParamList, but it navigates TO 'EmailSignIn' which is.
+// We need the prop type for the navigator that *contains* this screen. Assuming it's part of the RootStack.
+// The original code navigated to 'SignUp', which isn't in the central type. It seems 'EmailSignIn' with a flag is used for sign up.
+// Let's adjust the navigation target based on the central types.
+type WelcomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EmailSignIn'>;
 
-type WelcomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'SignIn' | 'SignUp'>;
-
-const WelcomeScreen = () => {
+/**
+ * WelcomeScreen Component: The initial screen shown to new users.
+ * Provides an option to navigate to the Sign Up flow.
+ */
+export function WelcomeScreen() {
   const navigation = useNavigation<WelcomeScreenNavigationProp>();
 
+  // Navigate to the Email Sign In screen, flagging it as a Sign Up flow
   const handleGetStarted = () => {
-    navigation.navigate('SignUp');
+    // Navigating to EmailSignIn with isSignUp: true based on RootStackParamList
+    navigation.navigate('EmailSignIn', { isSignUp: true });
   };
 
   return (
@@ -30,12 +39,13 @@ const WelcomeScreen = () => {
       </TouchableOpacity>
     </View>
   );
-};
+}
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212', // Dark background
+    backgroundColor: '#121212',
     padding: 24,
     justifyContent: 'space-between',
   },
@@ -72,5 +82,3 @@ const styles = StyleSheet.create({
     color: '#121212',
   },
 });
-
-export default WelcomeScreen;

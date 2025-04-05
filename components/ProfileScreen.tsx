@@ -1,84 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { ProfileTabScreenProps } from '../types/screens';
-
-interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-}
-
-interface ProfileData {
-  displayName: string;
-  bio: string;
-  location: string;
-  email: string;
-  phone: string;
-  interests: string[];
-  achievements: Achievement[];
-}
-
-interface SettingItem {
-  title: string;
-  icon: string;
-  screen?: string;
-  toggle?: boolean;
-  action?: string;
-}
-
-interface SettingsCategory {
-  title: string;
-  items: SettingItem[];
-}
-
-const SETTINGS_CATEGORIES: SettingsCategory[] = [
-  {
-    title: 'Help & Support',
-    items: [
-      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
-      { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
-      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
-      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
-      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' }
-    ]
-  },
-  {
-    title: 'Preferences',
-    items: [
-      { title: 'Dark Mode', icon: 'moon-outline', toggle: true, action: 'toggleTheme' }
-    ]
-  }
-];
-
-const PROFILE_DATA: ProfileData = {
-  displayName: 'John Smith',
-  bio: 'Fantasy AI enthusiast and avid storyteller. I love creating unique character interactions and exploring different narratives.',
-  location: 'San Francisco, CA',
-  email: 'john.smith@example.com',
-  phone: '+1 (555) 123-4567',
-  interests: ['AI Characters', 'Storytelling', 'Science Fiction', 'Fantasy Worlds', 'Interactive Fiction'],
-  achievements: [
-    {
-      id: '1',
-      title: 'Story Master',
-      description: 'Created 50+ unique conversations',
-      date: '2023-12-01'
-    },
-    {
-      id: '2',
-      title: 'Conversation Explorer',
-      description: 'Talked with 20 different characters',
-      date: '2023-11-15'
-    },
-    {
-      id: '3',
-      title: 'Premium Member',
-      description: 'Subscribed to Fantasy AI Pro',
-      date: '2023-10-30'
-    }
-  ]
-};
-import { supabase } from '../utils/supabase';
+import React, { useState, useContext, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -87,394 +7,574 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
-  Dimensions,
   TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../contexts/AuthContext';
-import { ThemeContext } from '../contexts/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const { width } = Dimensions.get('window');
+import { ProfileTabScreenProps } from '../types/screens';
+import { RootStackParamList } from '../types/navigation';
+import { Tables } from '../types/database'; // Import the Tables helper
+import { supabase } from '../utils/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { ThemeContext } from '../contexts/ThemeContext';
 
-export default function ProfileScreen({ navigation }: ProfileTabScreenProps) {
-  const { user, signOut, isGuest } = useAuth();
+// --- Types ---
+
+interface SettingItemType {
+  title: string;
+  icon: string;
+  screen?: keyof RootStackParamList;
+  toggle?: boolean;
+  action?: string;
+}
+
+interface SettingsCategoryType {
+  title: string;
+  items: SettingItemType[];
+}
+
+type ProfileDataType = Partial<Tables<'profiles'>>; // Define type alias for profile data state
+
+// --- Constants ---
+
+const SETTINGS_CATEGORIES: SettingsCategoryType[] = [
+  {
+    title: 'Account', // New Category
+    items: [
+      { title: 'Settings', icon: 'settings-outline', screen: 'Settings' }, // Added Settings navigation
+    ],
+  },
+  {
+    title: 'Help & Support',
+    items: [
+      { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },
+      { title: 'Report a Problem', icon: 'bug-outline', screen: 'ReportProblem' },
+      { title: 'Contact Us', icon: 'mail-outline', screen: 'ContactUs' },
+      { title: 'Terms & Conditions', icon: 'document-text-outline', screen: 'TermsAndConditions' },
+      { title: 'Privacy Policy', icon: 'shield-outline', screen: 'PrivacyPolicy' },
+    ],
+  },
+  {
+    title: 'Preferences',
+    items: [
+      { title: 'Dark Mode', icon: 'moon-outline', toggle: true, action: 'toggleTheme' },
+    ],
+  },
+];
+
+const DEFAULT_PROFILE_PLACEHOLDER = require('../assets/profile-placeholder.png');
+
+// --- Helper Functions ---
+
+// Function to determine dynamic colors based on theme
+const getDynamicColors = (isDarkMode: boolean) => ({
+  background: isDarkMode ? '#121212' : '#FFFFFF',
+  text: isDarkMode ? '#FFFFFF' : '#000000',
+  subText: isDarkMode ? '#AAAAAA' : '#666666',
+  card: isDarkMode ? '#1E1E1E' : '#FFFFFF',
+  border: isDarkMode ? '#333333' : '#F0F0F0',
+  primary: isDarkMode ? '#3D8CFF' : '#000000', // Consider a consistent primary color if needed
+  lightBackground: isDarkMode ? '#252525' : '#F0F0F0',
+  accent: '#4F46E5',
+  danger: isDarkMode ? '#FF5252' : '#E53935',
+  buttonDisabled: isDarkMode ? '#555555' : '#CCCCCC',
+});
+
+// --- Subcomponents ---
+
+interface ProfileHeaderProps {
+  profileData: ProfileDataType; // Use the defined type alias
+  isEditingDisplayName: boolean;
+  isEditingBio: boolean;
+  newDisplayName: string;
+  newBio: string;
+  isSaving: boolean;
+  colors: ReturnType<typeof getDynamicColors>;
+  onEditDisplayNameClick: () => void;
+  onSaveDisplayName: () => void;
+  onCancelDisplayNameEdit: () => void;
+  onEditBioClick: () => void;
+  onSaveBio: () => void;
+  onCancelBioEdit: () => void;
+  setNewDisplayName: (value: string) => void;
+  setNewBio: (value: string) => void;
+}
+
+const ProfileHeader: React.FC<ProfileHeaderProps> = memo(({
+  profileData,
+  isEditingDisplayName,
+  isEditingBio,
+  newDisplayName,
+  newBio,
+  isSaving,
+  colors,
+  onEditDisplayNameClick,
+  onSaveDisplayName,
+  onCancelDisplayNameEdit,
+  onEditBioClick,
+  onSaveBio,
+  onCancelBioEdit,
+  setNewDisplayName,
+  setNewBio,
+}) => {
+  return (
+    <View style={[styles.profileHeader, { backgroundColor: colors.card }]}>
+      <View style={styles.profileImageContainer}>
+        <Image
+          source={DEFAULT_PROFILE_PLACEHOLDER} // Use constant
+          style={styles.profileImage}
+        />
+        {/* TODO: Implement image editing functionality */}
+        <TouchableOpacity style={styles.editImageButton} disabled>
+          <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Display Name Section */}
+      {isEditingDisplayName ? (
+        <View style={styles.editUsernameContainer}>
+          <TextInput
+            style={[styles.usernameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
+            value={newDisplayName}
+            onChangeText={setNewDisplayName}
+            autoCapitalize="words"
+            placeholder="Enter display name"
+            placeholderTextColor={colors.subText}
+          />
+          <TouchableOpacity
+            onPress={onSaveDisplayName}
+            disabled={isSaving}
+            style={[
+              styles.editActionButton,
+              { backgroundColor: isSaving ? colors.buttonDisabled : colors.accent }
+            ]}
+          >
+            {isSaving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onCancelDisplayNameEdit}
+            disabled={isSaving}
+            style={[
+              styles.editActionButton,
+              { backgroundColor: colors.subText, marginLeft: 8, opacity: isSaving ? 0.5 : 1 }
+            ]}
+          >
+            <Ionicons name="close-outline" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.displayContainer}>
+          <Text style={[styles.displayName, { color: colors.text }]}>
+            {profileData.name || 'Set Display Name'}
+          </Text>
+          <TouchableOpacity onPress={onEditDisplayNameClick} style={styles.editIcon}>
+            <Ionicons name="pencil-outline" size={18} color={colors.subText} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Bio Section */}
+      {isEditingBio ? (
+        <View style={styles.editBioContainer}>
+          <TextInput
+            style={[styles.bioInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
+            value={newBio}
+            onChangeText={setNewBio}
+            multiline
+            numberOfLines={4}
+            placeholder="Tell us about yourself"
+            placeholderTextColor={colors.subText}
+          />
+          <View style={styles.bioButtonContainer}>
+            <TouchableOpacity
+              onPress={onSaveBio}
+              disabled={isSaving}
+              style={[
+                styles.editActionButton,
+                { backgroundColor: isSaving ? colors.buttonDisabled : colors.accent }
+              ]}
+            >
+              {isSaving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onCancelBioEdit}
+              disabled={isSaving}
+              style={[
+                styles.editActionButton,
+                { backgroundColor: colors.subText, marginLeft: 8, opacity: isSaving ? 0.5 : 1 }
+              ]}
+            >
+              <Ionicons name="close-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.displayContainer}>
+          <Text style={[styles.bio, { color: colors.text }]}>
+            {profileData.bio || 'No bio set.'}
+          </Text>
+          <TouchableOpacity onPress={onEditBioClick} style={styles.editIcon}>
+            <Ionicons name="pencil-outline" size={18} color={colors.subText} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Email Display */}
+      <View style={styles.emailContainer}>
+        <Ionicons name="mail-outline" size={18} color={colors.subText} style={styles.emailIcon} />
+        <Text style={[styles.emailText, { color: colors.subText }]}>
+          {profileData.email || 'No email'}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+interface SettingsItemProps {
+  item: SettingItemType;
+  colors: ReturnType<typeof getDynamicColors>;
+  isDarkMode: boolean;
+  onPress: (action?: string, screen?: keyof RootStackParamList) => void;
+}
+
+const SettingsItem: React.FC<SettingsItemProps> = memo(({ item, colors, isDarkMode, onPress }) => {
+  const isToggle = item.toggle;
+
+  return (
+    <TouchableOpacity
+      style={[styles.settingItem, { borderBottomColor: colors.border }]}
+      onPress={() => onPress(item.action, item.screen)}
+    >
+      <View style={styles.settingContent}>
+        <Ionicons name={item.icon as any} size={22} color={colors.text} style={styles.settingIcon} />
+        <Text style={[styles.settingText, { color: colors.text }]}>{item.title}</Text>
+      </View>
+      {isToggle ? (
+        <Text style={{ color: colors.subText }}>{isDarkMode ? 'On' : 'Off'}</Text>
+      ) : (
+        <Ionicons name="chevron-forward" size={22} color={colors.subText} />
+      )}
+    </TouchableOpacity>
+  );
+});
+
+interface SettingsSectionProps {
+  category: SettingsCategoryType;
+  colors: ReturnType<typeof getDynamicColors>;
+  isDarkMode: boolean;
+  onItemPress: (action?: string, screen?: keyof RootStackParamList) => void;
+}
+
+const SettingsSection: React.FC<SettingsSectionProps> = memo(({ category, colors, isDarkMode, onItemPress }) => (
+  <View style={styles.settingsCategoryContainer}>
+    <View style={[styles.settingsCategoryHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+      <Text style={[styles.settingsCategoryTitle, { color: colors.text }]}>{category.title}</Text>
+    </View>
+    <View style={[styles.settingsList, { backgroundColor: colors.card }]}>
+      {category.items.map((item) => (
+        <SettingsItem
+          key={item.title}
+          item={item}
+          colors={colors}
+          isDarkMode={isDarkMode}
+          onPress={onItemPress}
+        />
+      ))}
+    </View>
+  </View>
+));
+
+interface SignOutButtonProps {
+  onPress: () => void;
+  colors: ReturnType<typeof getDynamicColors>;
+}
+
+const SignOutButton: React.FC<SignOutButtonProps> = memo(({ onPress, colors }) => (
+  <TouchableOpacity
+    style={[styles.signOutButton, { backgroundColor: colors.lightBackground }]}
+    onPress={onPress}
+  >
+    <Ionicons name="log-out-outline" size={22} color={colors.danger} style={styles.signOutIcon} />
+    <Text style={[styles.signOutText, { color: colors.danger }]}>Sign Out</Text>
+  </TouchableOpacity>
+));
+
+
+// --- Main Component ---
+
+export const ProfileScreen: React.FC<ProfileTabScreenProps> = ({ navigation: propNavigation }) => {
+  const { user, signOut: contextSignOut, isGuest } = useAuth();
   const themeContext = useContext(ThemeContext);
+  const navigation = useNavigation<ProfileTabScreenProps['navigation']>(); // Use hook for consistency
+
   if (!themeContext) {
     throw new Error('ThemeContext must be used within a ThemeProvider');
   }
   const { isDarkMode, toggleTheme } = themeContext;
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [profileData, setProfileData] = useState<ProfileData>(PROFILE_DATA);
+  const [profileData, setProfileData] = useState<ProfileDataType>({ // Use the defined type alias
+    name: null,
+    bio: null,
+    email: user?.email || '',
+  });
   const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
-  const [newDisplayName, setNewDisplayName] = useState(profileData.displayName);
-  const [newBio, setNewBio] = useState(profileData.bio);
-  const { navigate } = useNavigation();
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [newBio, setNewBio] = useState('');
 
+  const colors = getDynamicColors(isDarkMode); // Calculate colors once
+
+  // --- Data Loading Effect ---
   useEffect(() => {
     const loadProfileData = async () => {
       setIsLoading(true);
       try {
         if (isGuest) {
-          // Load guest profile from AsyncStorage
-          const guestProfile = await AsyncStorage.getItem('guestProfile');
-          if (guestProfile) {
-            setProfileData(JSON.parse(guestProfile));
-          }
+          const guestProfileString = await AsyncStorage.getItem('guestProfile');
+          const guestProfile = guestProfileString ? JSON.parse(guestProfileString) : {};
+          const name = guestProfile.name || 'Guest User';
+          const bio = guestProfile.bio || '';
+          setProfileData({ name, bio, email: 'guest@example.com' });
+          setNewDisplayName(name);
+          setNewBio(bio);
         } else if (user?.id) {
-          // Load authenticated user profile from Supabase
           const { data, error } = await supabase
-            .from('users')
-            .select('*')
+            .from('profiles')
+            .select('name, bio, email')
             .eq('id', user.id)
             .single();
 
-          if (error) throw error;
+          if (error && error.code !== 'PGRST116') { // Ignore 'No rows found'
+            console.error('Supabase fetch error:', error);
+            throw error; // Re-throw to be caught below
+          }
 
           if (data) {
-            setProfileData({
-              displayName: data.display_name || PROFILE_DATA.displayName,
-              bio: data.bio || PROFILE_DATA.bio,
-              location: data.location || PROFILE_DATA.location,
-              email: user.email || PROFILE_DATA.email,
-              phone: data.phone || PROFILE_DATA.phone,
-              interests: data.interests || PROFILE_DATA.interests,
-              achievements: PROFILE_DATA.achievements
-            });
+            const name = data.name || '';
+            const bio = data.bio || '';
+            setProfileData({ id: user.id, name, bio, email: data.email || user.email || '' });
+            setNewDisplayName(name);
+            setNewBio(bio);
+          } else {
+            // Profile doesn't exist, attempt to create it
+            console.log(`Profile not found for user ${user.id}, attempting to create.`);
+            const initialEmail = user.email || '';
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert({ id: user.id, email: initialEmail, name: null, bio: null });
+
+            if (insertError) {
+              console.error('Error inserting initial profile:', insertError);
+              // Show error to user, maybe prevent further edits until resolved
+              Alert.alert('Error', 'Could not initialize your profile. Please try again later.');
+            } else {
+              console.log(`Initial profile created for user ${user.id}`);
+              setProfileData({ id: user.id, name: null, bio: null, email: initialEmail });
+              setNewDisplayName('');
+              setNewBio('');
+            }
           }
+        } else {
+           // Should not happen if isGuest is false, but handle defensively
+           console.warn("User is not guest but has no ID, cannot load profile.");
+           setProfileData({ name: 'Error', bio: 'Could not load profile', email: '' });
         }
       } catch (error) {
         console.error('Error loading profile:', error);
-        Alert.alert('Error', 'Failed to load profile data');
+        Alert.alert('Error', 'Failed to load profile data. Please try again.');
+        // Set some default error state?
+        setProfileData({ name: 'Error', bio: 'Load failed', email: '' });
       } finally {
         setIsLoading(false);
       }
     };
 
     loadProfileData();
-  }, [user?.id, isGuest]);
+  }, [user?.id, isGuest, user?.email]); // Dependencies
 
-  // Dynamic colors based on theme
-  const colors = {
-    background: isDarkMode ? '#121212' : '#FFFFFF',
-    text: isDarkMode ? '#FFFFFF' : '#000000',
-    subText: isDarkMode ? '#AAAAAA' : '#666666',
-    card: isDarkMode ? '#1E1E1E' : '#FFFFFF',
-    border: isDarkMode ? '#333333' : '#F0F0F0',
-    primary: isDarkMode ? '#3D8CFF' : '#000000',
-    lightBackground: isDarkMode ? '#252525' : '#F0F0F0',
-    accent: '#4F46E5'
-  };
+  // --- Callbacks for Memoization ---
 
-  // Removed handleEditProfile function
-
-  const navigateToScreen = (screenName: string) => { // Added type annotation
-    navigation.navigate(screenName);
-  };
-
-  const handleEditDisplayNameClick = () => {
-    setNewDisplayName(profileData.displayName);
+  const handleEditDisplayNameClick = useCallback(() => {
+    setNewDisplayName(profileData.name || '');
     setIsEditingDisplayName(true);
-  };
+  }, [profileData.name]);
 
-  const isGuestUser = () => {
-    return !user?.id;
-  };
-
-  const handleSaveDisplayName = async () => {
-    setIsSaving(true);
-    try {
-      if (isGuestUser()) {
-        // Save to AsyncStorage for guest users
-        await AsyncStorage.setItem('guestProfile', JSON.stringify({
-          ...profileData,
-          displayName: newDisplayName
-        }));
-      } else {
-        // Save to Supabase for authenticated users
-        if (!user?.id) {
-          throw new Error('User not authenticated');
-        }
-        const { error } = await supabase
-          .from('users')
-          .update({
-            display_name: newDisplayName,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
-
-        if (error) throw error;
-      }
-
-      setProfileData(prevData => ({
-        ...prevData,
-        displayName: newDisplayName
-      }));
-      setIsEditingDisplayName(false);
-      Alert.alert('Success', 'Display name updated successfully');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update display name');
-      console.error('Update error:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancelDisplayNameEdit = () => {
+  const handleCancelDisplayNameEdit = useCallback(() => {
     setIsEditingDisplayName(false);
-    setNewDisplayName(profileData.displayName);
-  };
+    setNewDisplayName(profileData.name || '');
+  }, [profileData.name]);
 
-  const handleEditBioClick = () => {
-    setIsEditingBio(true);
-  };
-
-  const handleSaveBio = async () => {
+  const handleSaveDisplayName = useCallback(async () => {
+    if (newDisplayName === profileData.name) {
+      setIsEditingDisplayName(false); // No change, just exit edit mode
+      return;
+    }
     setIsSaving(true);
     try {
-      if (isGuestUser()) {
-        // Save to AsyncStorage for guest users
+      if (isGuest) {
+        const currentGuestProfile = profileData;
         await AsyncStorage.setItem('guestProfile', JSON.stringify({
-          ...profileData,
-          bio: newBio
+          ...currentGuestProfile,
+          name: newDisplayName,
         }));
       } else if (user?.id) {
-        // Save to Supabase for authenticated users
         const { error } = await supabase
-          .from('users')
-          .update({
-            bio: newBio,
-            updated_at: new Date().toISOString()
-          })
+          .from('profiles')
+          .update({ name: newDisplayName, updated_at: new Date().toISOString() })
           .eq('id', user.id);
-
         if (error) throw error;
+      } else {
+         throw new Error('Cannot save: User not identified.');
       }
 
-      setProfileData(prevData => ({
-        ...prevData,
-        bio: newBio
-      }));
-      setIsEditingBio(false);
-      Alert.alert('Success', 'Bio updated successfully');
+      setProfileData((prevData: ProfileDataType) => ({ ...prevData, name: newDisplayName })); // Add type for prevData
+      setIsEditingDisplayName(false);
+      Alert.alert('Success', 'Display name updated.');
     } catch (error) {
-      Alert.alert('Error', 'Failed to update bio');
-      console.error('Update error:', error);
+      Alert.alert('Error', `Failed to update display name: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Update display name error:', error);
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [newDisplayName, profileData, isGuest, user?.id]);
 
-  const handleCancelBioEdit = () => {
+  const handleEditBioClick = useCallback(() => {
+    setNewBio(profileData.bio || '');
+    setIsEditingBio(true);
+  }, [profileData.bio]);
+
+  const handleCancelBioEdit = useCallback(() => {
     setIsEditingBio(false);
-    setNewBio(profileData.bio);
-  };
+    setNewBio(profileData.bio || '');
+  }, [profileData.bio]);
 
-  const handleActionPress = (action: string | undefined, screen: string | undefined) => { // Added types
+  const handleSaveBio = useCallback(async () => {
+    if (newBio === profileData.bio) {
+        setIsEditingBio(false); // No change
+        return;
+    }
+    setIsSaving(true);
+    try {
+      if (isGuest) {
+        const currentGuestProfile = profileData;
+        await AsyncStorage.setItem('guestProfile', JSON.stringify({
+          ...currentGuestProfile,
+          bio: newBio,
+        }));
+      } else if (user?.id) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ bio: newBio, updated_at: new Date().toISOString() })
+          .eq('id', user.id);
+        if (error) throw error;
+      } else {
+         throw new Error('Cannot save: User not identified.');
+      }
+
+      setProfileData((prevData: ProfileDataType) => ({ ...prevData, bio: newBio })); // Add type for prevData
+      setIsEditingBio(false);
+      Alert.alert('Success', 'Bio updated.');
+    } catch (error) {
+      Alert.alert('Error', `Failed to update bio: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Update bio error:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [newBio, profileData, isGuest, user?.id]);
+
+  const navigateToScreen = useCallback((screenName: keyof RootStackParamList) => {
+    // Type assertion needed if ProfileScreen isn't directly in RootStackParamList
+    // or if RootStackParamList includes screens not reachable from here.
+    // Consider creating a specific ParamList for the ProfileTab if needed.
+    navigation.navigate(screenName as any);
+  }, [navigation]);
+
+  const handleActionPress = useCallback((action?: string, screen?: keyof RootStackParamList) => {
     if (action === 'toggleTheme') {
       toggleTheme();
     } else if (screen) {
       navigateToScreen(screen);
     }
-  };
+  }, [toggleTheme, navigateToScreen]);
 
-  const renderInterestItem = (interest: string, index: number) => (
-    <View key={index} style={[styles.interestItem, { backgroundColor: colors.lightBackground }]}>
-      <Text style={[styles.interestText, { color: colors.text }]}>{interest}</Text>
-    </View>
-  );
+  const handleSignOut = useCallback(() => {
+      Alert.alert(
+          "Sign Out",
+          "Are you sure you want to sign out?",
+          [
+              { text: "Cancel", style: "cancel" },
+              { text: "Sign Out", style: "destructive", onPress: contextSignOut }
+          ]
+      );
+  }, [contextSignOut]);
 
-  const renderAchievementItem = (achievement: Achievement) => (
-    <View key={achievement.id} style={[styles.achievementItem, { backgroundColor: isDarkMode ? '#252525' : '#F9F9F9' }]}>
-      <View style={styles.achievementIcon}>
-        <Text style={styles.achievementIconText}>🏆</Text>
-      </View>
-      <View style={styles.achievementContent}>
-        <Text style={[styles.achievementTitle, { color: colors.text }]}>{achievement.title}</Text>
-        <Text style={[styles.achievementDescription, { color: colors.subText }]}>{achievement.description}</Text>
-        <Text style={[styles.achievementDate, { color: colors.subText }]}>
-          {new Date(achievement.date).toLocaleDateString()}
-        </Text>
-      </View>
-    </View>
-  );
 
-  const renderSettingItem = (item: SettingItem) => {
-    const isToggle = item.toggle;
-    
+  // --- Render Logic ---
+
+  if (isLoading) {
     return (
-      <TouchableOpacity 
-        key={item.title}
-        style={[styles.settingItem, { borderBottomColor: colors.border }]} 
-        onPress={() => handleActionPress(item.action, item.screen)}
-      >
-        <View style={styles.settingContent}>
-          <Ionicons name={item.icon} size={22} color={colors.text} style={styles.settingIcon} />
-          <Text style={[styles.settingText, { color: colors.text }]}>{item.title}</Text>
-        </View>
-        {isToggle ? (
-          <Text style={{ color: colors.subText }}>{isDarkMode ? 'On' : 'Off'}</Text>
-        ) : (
-          <Ionicons name="chevron-forward" size={22} color={colors.subText} />
-        )}
-      </TouchableOpacity>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
     );
-  };
-
-  const renderSettingsCategory = (category: SettingsCategory, index: number) => (
-    <View key={index} style={[styles.settingsCategoryContainer, index !== 0 && { marginTop: 24 }]}>
-      <View style={[styles.settingsCategoryHeader, { backgroundColor: colors.card }]}>
-        <Text style={[styles.settingsCategoryTitle, { color: colors.text }]}>{category.title}</Text>
-      </View>
-      <View style={[styles.settingsList, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        {category.items.map((item: SettingItem) => renderSettingItem(item))}
-      </View>
-    </View>
-  );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
-        {/* Profile Header */}
-        <View style={[styles.profileHeader, { backgroundColor: colors.card }]}>
-          <View style={styles.profileImageContainer}>
-            <Image 
-              source={require('../assets/profile-placeholder.png')} 
-              style={styles.profileImage}
+        <ProfileHeader
+          profileData={profileData}
+          isEditingDisplayName={isEditingDisplayName}
+          isEditingBio={isEditingBio}
+          newDisplayName={newDisplayName}
+          newBio={newBio}
+          isSaving={isSaving}
+          colors={colors}
+          onEditDisplayNameClick={handleEditDisplayNameClick}
+          onSaveDisplayName={handleSaveDisplayName}
+          onCancelDisplayNameEdit={handleCancelDisplayNameEdit}
+          onEditBioClick={handleEditBioClick}
+          onSaveBio={handleSaveBio}
+          onCancelBioEdit={handleCancelBioEdit}
+          setNewDisplayName={setNewDisplayName}
+          setNewBio={setNewBio}
+        />
+
+        <View style={styles.settingsContainer}>
+          {SETTINGS_CATEGORIES.map((category) => (
+            <SettingsSection
+              key={category.title}
+              category={category}
+              colors={colors}
+              isDarkMode={isDarkMode}
+              onItemPress={handleActionPress}
             />
-            <TouchableOpacity style={styles.editImageButton}>
-              <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-          
-          {isEditingDisplayName ? (
-            <View style={styles.editUsernameContainer}>
-              <TextInput
-                style={[styles.usernameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
-                value={newDisplayName}
-                onChangeText={setNewDisplayName}
-                autoCapitalize="words"
-                placeholder="Enter display name"
-                placeholderTextColor={colors.subText}
-              />
-              <TouchableOpacity
-                onPress={handleSaveDisplayName}
-                disabled={isSaving}
-                style={[
-                  styles.editUsernameButton,
-                  { backgroundColor: isSaving ? colors.subText : colors.accent }
-                ]}
-              >
-                {isSaving ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleCancelDisplayNameEdit}
-                disabled={isSaving}
-                style={[
-                  styles.editUsernameButton,
-                  {
-                    backgroundColor: colors.subText,
-                    marginLeft: 8,
-                    opacity: isSaving ? 0.5 : 1
-                  }
-                ]}
-              >
-                <Ionicons name="close-outline" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={[styles.usernameDisplayContainer, {flexDirection: 'row', alignItems: 'center'}]}>
-              <Text style={[styles.displayName, { color: colors.text }]}>
-                {profileData.displayName}
-              </Text>
-              <TouchableOpacity onPress={handleEditDisplayNameClick} style={[styles.editIcon, {marginLeft: 8}]}>
-                <Ionicons name="create-outline" size={18} color={colors.subText} />
-              </TouchableOpacity>
-            </View>
-          )}
-          
-          
-          {isEditingBio ? (
-            <View style={styles.editBioContainer}>
-              <TextInput
-                style={[styles.bioInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.lightBackground }]}
-                value={newBio}
-                onChangeText={setNewBio}
-                multiline
-                numberOfLines={4}
-                placeholder="Tell us about yourself"
-                placeholderTextColor={colors.subText}
-              />
-              <View style={styles.bioButtonContainer}>
-                <TouchableOpacity
-                  onPress={handleSaveBio}
-                  disabled={isSaving}
-                  style={[
-                    styles.editBioButton,
-                    { backgroundColor: isSaving ? colors.subText : colors.accent }
-                  ]}
-                >
-                  {isSaving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleCancelBioEdit} style={[styles.editBioButton, { backgroundColor: colors.subText, marginLeft: 8 }]}>
-                  <Ionicons name="close-outline" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.bioDisplayContainer}>
-              <Text style={[styles.bio, { color: colors.text }]}>
-                {profileData.bio || 'Tell us about yourself'}
-              </Text>
-              <TouchableOpacity onPress={handleEditBioClick} style={styles.editIcon}>
-                <Ionicons name="create-outline" size={18} color={colors.subText} />
-              </TouchableOpacity>
-            </View>
-          )}
-          
-          {/* Removed Edit Profile Button */}
-          
+          ))}
         </View>
-        
-        {/* Removed Achievements section */}
-        
-        {/* Settings */}
-        <View style={[styles.settingsContainer, { backgroundColor: colors.card }]}>
-          {SETTINGS_CATEGORIES.map((category, index) => renderSettingsCategory(category, index))}
-        </View>
-        
-        {/* Sign Out Button */}
-        <TouchableOpacity
-          style={[styles.signOutButton, { backgroundColor: isDarkMode ? '#2A2A2A' : '#F5F5F5' }]}
-          onPress={signOut}
-        >
-          <Ionicons name="log-out-outline" size={22} color={isDarkMode ? '#FF5252' : '#E53935'} style={styles.signOutIcon} />
-          <Text style={[styles.signOutText, { color: isDarkMode ? '#FF5252' : '#E53935' }]}>Sign Out</Text>
-        </TouchableOpacity>
-        
+
+        {!isGuest && (
+            <SignOutButton onPress={handleSignOut} colors={colors} />
+        )}
+
         <Text style={[styles.versionText, { color: colors.subText }]}>
-          Version 1.0.0
+          Version 1.0.0 {/* TODO: Make version dynamic */}
         </Text>
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
+
+
+// --- Styles ---
 
 const styles = StyleSheet.create({
   container: {
@@ -484,11 +584,12 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
   },
+  // Profile Header Styles
   profileHeader: {
     padding: 24,
     borderRadius: 24,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24, // Increased margin
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -503,154 +604,124 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    borderWidth: 4,
-    borderColor: '#4F46E5',
   },
   editImageButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#4F46E5',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#4F46E5', // Accent color
+    padding: 6,
+    borderRadius: 15,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: '#FFFFFF', // White border - Use color from theme?
+  },
+  displayContainer: { // Container for text + edit icon
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', // Center items
+    marginTop: 8,
+    width: '100%',
+    minHeight: 30, // Ensure space even if text is short
   },
   displayName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 4,
-  },
-  username: {
-    fontSize: 16,
-    marginBottom: 12,
+    textAlign: 'center',
   },
   bio: {
-    fontSize: 15,
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-    paddingHorizontal: 16,
+    flexShrink: 1, // Allow bio to shrink if needed
+    marginRight: 4, // Space before edit icon
   },
-  editProfileButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  editButtonIcon: {
-    marginRight: 6,
-  },
-  editButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  infoCard: {
-    padding: 16,
-    borderRadius: 24,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  editIcon: {
+    padding: 4, // Make icon easier to tap
     marginLeft: 8,
   },
-  infoText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  interestsContainer: {
+  editUsernameContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  interestItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  interestText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  achievementsContainer: {
+    alignItems: 'center',
+    width: '100%',
     marginTop: 8,
   },
-  achievementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  achievementIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFD700',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  achievementIconText: {
-    fontSize: 22,
-  },
-  achievementContent: {
+  usernameInput: {
     flex: 1,
-  },
-  achievementTitle: {
-    fontSize: 16,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 18, // Match display name size?
     fontWeight: '600',
-    marginBottom: 4,
+    marginRight: 8,
   },
-  achievementDescription: {
+  editBioContainer: {
+    width: '100%',
+    marginTop: 8,
+  },
+  bioInput: {
+    width: '100%',
+    minHeight: 80,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10, // Use vertical padding
     fontSize: 14,
-    marginBottom: 4,
-  },
-  achievementDate: {
-    fontSize: 12,
-  },
-  settingsContainer: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  settingsCategoryContainer: {
+    textAlignVertical: 'top',
     marginBottom: 8,
   },
+  bioButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    // marginTop: 8, // Removed, handled by bioInput marginBottom
+  },
+  editActionButton: { // Combined style for save/cancel buttons
+    paddingHorizontal: 10, // Adjusted padding
+    paddingVertical: 8,    // Adjusted padding
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40,
+    minHeight: 36, // Ensure consistent height
+  },
+  emailContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    justifyContent: 'center',
+  },
+  emailIcon: {
+    marginRight: 6,
+  },
+  emailText: {
+    fontSize: 14,
+  },
+  // Settings Styles
+  settingsContainer: {
+    // Container for all settings sections
+  },
+  settingsCategoryContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    marginBottom: 16, // Space between categories
+  },
   settingsCategoryHeader: {
-    paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
   },
   settingsCategoryTitle: {
     fontSize: 16,
     fontWeight: '600',
   },
   settingsList: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
+    // Styles for the list wrapper within a category
   },
   settingItem: {
     flexDirection: 'row',
@@ -658,26 +729,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    // Last item should not have border? Handled by map index if needed
   },
   settingContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   settingIcon: {
-    marginRight: 12,
+    marginRight: 16,
+    width: 24,
+    textAlign: 'center',
   },
   settingText: {
-    fontSize: 15,
+    fontSize: 16,
   },
+  // Sign Out Button Styles
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 24,
-    marginTop: 8,
-    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 16, // Adjusted margin
   },
   signOutIcon: {
     marginRight: 8,
@@ -686,73 +760,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Username editing styles
-  usernameSection: {
-    marginBottom: 16,
-    width: '100%',
-  },
-  editUsernameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  usernameInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginRight: 8,
-  },
-  editUsernameButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  usernameDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editIcon: {
-    marginLeft: 8,
-  },
-  // Bio editing styles
-  editBioContainer: {
-    marginTop: 12,
-    width: '100%',
-  },
-  bioInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  bioButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 8,
-  },
-  editBioButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bioDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 12,
-  },
+  // Version Text Styles
   versionText: {
-    fontSize: 14,
+    marginTop: 24, // Increased margin
     textAlign: 'center',
+    fontSize: 12,
   },
-}); 
+});

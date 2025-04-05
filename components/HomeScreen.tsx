@@ -1,658 +1,592 @@
-import React, { useState, useContext, useRef } from 'react';
+import React, { useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
-  Dimensions,
   SafeAreaView,
   StatusBar,
   TextInput,
-  ScrollView,
-  Animated,
-  RefreshControl,
+  Pressable, // Keep Pressable
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
+// Removed unused: Dimensions, useRef, useEffect, Animated, RefreshControl, ScrollView, LinearGradient, Image
+// Removed unused: BottomTabNavigationProp (using NavigationProp is sufficient)
 
+// --- Type Definitions ---
+
+// Renamed Tool to Assistant for clarity
+interface Assistant {
+  id: string;
+  name: string;
+  description: string;
+  image: any; // Keep for now for navigation params compatibility
+  tags: string[];
+  // followers: string; // Removed as unused
+  category: string;
+  suggestedQuestions: string[];
+}
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+// Parameters for navigating to the Chat screen
+interface CharacterParams {
+  id: string;
+  name: string;
+  avatar: any; // Keep image for chat screen compatibility for now
+  description?: string;
+  tags?: string[];
+  category?: string;
+  iconName?: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+}
+
+// Navigation stack parameters
+type RootStackParamList = {
+  Home: undefined;
+  Chat: { character: CharacterParams };
+  DiscountOfferScreen: {
+    fromCharacter: boolean;
+    character: CharacterParams;
+  };
+  Profile: undefined; // Keep for type definition even if navigation is removed from this screen
+  HelpCenter: undefined; // Keep for type definition
+};
+
+// Component Props
+type HomeScreenNavigationProp = NavigationProp<RootStackParamList, 'Home'>;
+
+// --- Constants ---
+
+const PADDING_HORIZONTAL = 16;
+const GAP = 16;
+const NUM_COLUMNS = 2;
+// Calculate column width dynamically (moved inside component or keep global if no dependency change)
+// const { width } = Dimensions.get('window'); // Removed Dimensions import
+// const COLUMN_WIDTH = (width - PADDING_HORIZONTAL * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
+// Note: COLUMN_WIDTH calculation needs Dimensions, re-import or calculate differently if needed.
+// For now, assuming a fixed width or alternative calculation method if Dimensions is truly removed.
+// Re-adding Dimensions temporarily for width calculation.
+import { Dimensions } from 'react-native';
 const { width } = Dimensions.get('window');
-const COLUMN_WIDTH = width / 2 - 24;
+const COLUMN_WIDTH = (width - PADDING_HORIZONTAL * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
-// Mock data for characters
-const CHARACTERS = [
+
+// Renamed TOOLS to ASSISTANTS
+const ASSISTANTS: Assistant[] = [
+  // ... (Keep the existing assistant data, ensure it matches the 'Assistant' interface)
+  // Example entry:
   {
-    id: '1',
-    name: 'Max',
-    description: 'Max is a 27-year-old man who is your brother\'s friend but he has hatred for you',
+    id: 'self-growth',
+    name: 'Self-Growth',
+    description: 'Become a better version of yourself',
     image: require('../assets/char1.png'),
-    tags: ['Cold', 'Loyal', 'Flirtatious', 'Jealous'],
-    followers: '1.8M',
-    category: 'Original'
+    tags: ['Personal', 'Development', 'Improvement'],
+    // followers: '1.2M', // Removed
+    category: 'Life',
+    suggestedQuestions: [
+      "How can I develop better daily habits?",
+      "What are some ways to boost my confidence?",
+      "How do I stay motivated when working on self-improvement?",
+      "What books would you recommend for personal growth?"
+    ]
   },
   {
-    id: '2',
-    name: 'Yuto',
-    description: 'You have autism. You are Yuto\'s wife he is 25 years old and you are 21 years old',
+    id: 'lifestyle',
+    name: 'Lifestyle',
+    description: 'Fill your life with purpose and joy',
     image: require('../assets/char2.png'),
-    tags: ['Protective', 'Gentle', 'Romance', 'Billionaire'],
-    followers: '1.8M',
-    category: 'Original'
+    tags: ['Habits', 'Routines', 'Wellbeing'],
+    category: 'Life',
+    suggestedQuestions: [
+      "How can I create a more balanced daily routine?",
+      "What are some ways to reduce stress in my life?",
+      "How do I find more meaning in my daily activities?",
+      "What small changes can I make to improve my wellbeing?"
+    ]
   },
   {
-    id: '3',
-    name: 'Axel',
-    description: 'Did the exchange player fall in love with you? 🇺🇸 🇧🇷 ❤️',
+    id: 'spirituality',
+    name: 'Spirituality',
+    description: 'Enrich your life with wisdom',
     image: require('../assets/char3.png'),
-    tags: ['Dominant', 'Romance', 'First Love', 'Sharp-tongued'],
-    followers: '11.5M',
-    category: 'Original'
+    tags: ['Mindfulness', 'Meditation', 'Philosophy'],
+    category: 'Life',
+    suggestedQuestions: [
+      "How can I start a meditation practice?",
+      "What are some simple mindfulness exercises?",
+      "How do I find inner peace in stressful times?",
+      "What spiritual practices would you recommend for beginners?"
+    ]
   },
   {
-    id: '4',
-    name: 'Charlotte',
-    description: 'Your cousin who is over for the weekend',
+    id: 'fitness',
+    name: 'Fitness',
+    description: 'Achieve your fitness goals',
     image: require('../assets/char4.png'),
-    tags: ['Playful', 'Mischievous', 'Family'],
-    followers: '6.7M',
-    category: 'Original'
+    tags: ['Workouts', 'Nutrition', 'Health'],
+    category: 'Health',
+    suggestedQuestions: [
+      "What's a good beginner workout routine?",
+      "How can I stay consistent with exercise?",
+      "What foods should I eat to support my fitness goals?",
+      "How do I prevent injuries when working out?"
+    ]
   },
   {
-    id: '5',
-    name: 'Paulo',
-    description: 'Can I play ball with the mlk...',
+    id: 'career',
+    name: 'Career',
+    description: 'Get your work done faster',
     image: require('../assets/char5.png'),
-    tags: ['Text Game', 'Loyal', 'Gentle', 'Jealous'],
-    followers: '3.5M',
-    category: 'Original'
+    tags: ['Productivity', 'Skills', 'Growth'],
+    category: 'Work',
+    suggestedQuestions: [
+      "How can I be more productive at work?",
+      "What skills are most valuable in my industry?",
+      "How do I negotiate a better salary?",
+      "What's the best way to handle workplace conflicts?"
+    ]
   },
   {
-    id: '6',
-    name: 'Nishimura Riki',
-    description: 'Riki | forced marriage for our dad\'s companies 💮',
+    id: 'emails',
+    name: 'Emails',
+    description: 'Craft emails in seconds',
     image: require('../assets/char6.png'),
-    tags: ['Elegant', 'Movies&TV', 'Romance'],
-    followers: '1.9M',
-    category: 'Original'
+    tags: ['Professional', 'Communication', 'Business'],
+    category: 'Work',
+    suggestedQuestions: [
+      "How do I write a professional follow-up email?",
+      "What's a good subject line for a sales email?",
+      "How can I make my emails more concise?",
+      "What's the best way to structure a business email?"
+    ]
   },
   {
-    id: '7',
-    name: 'Biker Boy',
-    description: 'He is very selfish but kinda sweet.',
+    id: 'lyrics-poetry',
+    name: 'Lyrics & Poetry',
+    description: 'Make songs and poems',
     image: require('../assets/char7.png'),
-    tags: ['OC', 'Student', 'Cold', 'Gentle', 'Badboy'],
-    followers: '16.3M',
-    category: 'Original'
+    tags: ['Creative', 'Writing', 'Artistic'],
+    category: 'Creative',
+    suggestedQuestions: [
+      "How do I write a catchy chorus?",
+      "What are some good rhyme schemes for poetry?",
+      "How can I improve my songwriting skills?",
+      "What makes a poem emotionally powerful?"
+    ]
   },
   {
-    id: '8',
-    name: 'Sarah',
-    description: 'Your friends younger sister who you\'re taking to the gym.',
+    id: 'fun',
+    name: 'Fun',
+    description: 'Explore exciting activities',
     image: require('../assets/char8.png'),
-    tags: ['Sweet', 'Cute', 'Pure', 'Dedicated'],
-    followers: '4.2M',
-    category: 'Original'
+    tags: ['Games', 'Entertainment', 'Leisure'],
+    category: 'Entertainment',
+    suggestedQuestions: [
+      "What are some fun party games for adults?",
+      "How can I make a game night more exciting?",
+      "What are some creative date night ideas?",
+      "How do I plan a memorable weekend getaway?"
+    ]
   },
   {
-    id: '9',
-    name: 'Professor James',
-    description: 'Your strict but fair history professor with a mysterious past',
+    id: 'link-ask',
+    name: 'Link & Ask',
+    description: 'Explore any web content',
     image: require('../assets/char9.png'),
-    tags: ['Intellectual', 'Strict', 'Mentor', 'Mysterious'],
-    followers: '2.7M',
-    category: 'Original'
+    tags: ['Research', 'Information', 'Learning'],
+    category: 'Education',
+    suggestedQuestions: [
+      "How do I research a topic effectively?",
+      "What are some reliable sources for news?",
+      "How can I verify information I find online?",
+      "What's the best way to summarize long articles?"
+    ]
   },
   {
-    id: '10',
-    name: 'Kai',
-    description: 'A surfing instructor you met on vacation who seems to be hiding something',
+    id: 'languages',
+    name: 'Languages',
+    description: 'Simplify your language learning',
     image: require('../assets/char10.png'),
-    tags: ['Carefree', 'Athletic', 'Secretive', 'Charming'],
-    followers: '8.1M',
-    category: 'Original'
-  },
-  
-  // Fantasy Characters
-  {
-    id: 'fantasy1',
-    name: 'Gandalf',
-    description: 'The wise wizard from Middle Earth who guides heroes on their journey',
-    image: require('../assets/character/fantasy1.png'),
-    tags: ['Wise', 'Powerful', 'Mysterious', 'Mentor'],
-    followers: '15.2M',
-    category: 'Fantasy'
+    tags: ['Translation', 'Practice', 'Culture'],
+    category: 'Education',
+    suggestedQuestions: [
+      "What's the fastest way to learn a new language?",
+      "How can I improve my pronunciation?",
+      "What are good language learning apps?",
+      "How do I stay motivated when learning a language?"
+    ]
   },
   {
-    id: 'fantasy2',
-    name: 'Daenerys Targaryen',
-    description: 'The Mother of Dragons and rightful heir to the Iron Throne',
-    image: require('../assets/character/fantasy2.png'),
-    tags: ['Determined', 'Royal', 'Dragons', 'Conqueror'],
-    followers: '18.7M',
-    category: 'Fantasy'
-  },
-  {
-    id: 'fantasy3',
-    name: 'Harry Potter',
-    description: 'The Boy Who Lived and the Chosen One of the wizarding world',
-    image: require('../assets/character/fantasy3.png'),
-    tags: ['Brave', 'Wizard', 'Chosen One', 'Loyal'],
-    followers: '22.3M',
-    category: 'Fantasy'
-  },
-  {
-    id: 'fantasy4',
-    name: 'Aragorn',
-    description: 'The rightful King of Gondor and leader of the Rangers of the North',
-    image: require('../assets/character/fantasy4.png'),
-    tags: ['Ranger', 'King', 'Warrior', 'Noble'],
-    followers: '12.8M',
-    category: 'Fantasy'
-  },
-  {
-    id: 'fantasy5',
-    name: 'Galadriel',
-    description: 'The powerful Elven Queen with ancient wisdom and magical abilities',
-    image: require('../assets/character/fantasy5.png'),
-    tags: ['Elf', 'Queen', 'Magical', 'Ancient'],
-    followers: '9.4M',
-    category: 'Fantasy'
-  },
-  
-  // Historical Characters
-  {
-    id: 'historical1',
-    name: 'Cleopatra',
-    description: 'The last active ruler of the Ptolemaic Kingdom of Egypt',
-    image: require('../assets/character/historical1.png'),
-    tags: ['Queen', 'Ruler', 'Intelligent', 'Strategic'],
-    followers: '14.2M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical2',
-    name: 'Julius Caesar',
-    description: 'Roman general and statesman who played a critical role in the events that led to the demise of the Roman Republic',
-    image: require('../assets/character/historical2.png'),
-    tags: ['Emperor', 'Conqueror', 'Military', 'Leader'],
-    followers: '13.5M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical3',
-    name: 'Leonardo da Vinci',
-    description: 'Italian polymath whose areas of interest included invention, drawing, painting, sculpture, architecture, science, music, mathematics, engineering, and more',
-    image: require('../assets/character/historical3.png'),
-    tags: ['Genius', 'Artist', 'Inventor', 'Renaissance'],
-    followers: '16.7M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical4',
-    name: 'Marie Antoinette',
-    description: 'The last Queen of France before the French Revolution',
-    image: require('../assets/character/historical4.png'),
-    tags: ['Queen', 'French', 'Aristocrat', 'Tragic'],
-    followers: '10.3M',
-    category: 'Historical'
-  },
-  {
-    id: 'historical5',
-    name: 'Genghis Khan',
-    description: 'Founder and first Great Khan and Emperor of the Mongol Empire',
-    image: require('../assets/character/historical5.png'),
-    tags: ['Conqueror', 'Emperor', 'Warrior', 'Ruler'],
-    followers: '11.9M',
-    category: 'Historical'
-  },
-  
-  // Professional Characters
-  {
-    id: 'professional1',
-    name: 'Dr. Sarah Chen',
-    description: 'Brilliant neurosurgeon who saves lives while battling her own personal demons',
-    image: require('../assets/character/professional1.png'),
-    tags: ['Doctor', 'Genius', 'Dedicated', 'Compassionate'],
-    followers: '8.6M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional2',
-    name: 'Prof. James Wilson',
-    description: 'Renowned psychology professor with unconventional teaching methods',
-    image: require('../assets/character/professional2.png'),
-    tags: ['Academic', 'Mentor', 'Eccentric', 'Brilliant'],
-    followers: '7.2M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional3',
-    name: 'Chef Antonio',
-    description: 'Passionate Italian chef with a flair for the dramatic and incredible culinary skills',
-    image: require('../assets/character/professional3.png'),
-    tags: ['Chef', 'Creative', 'Passionate', 'Temperamental'],
-    followers: '9.1M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional4',
-    name: 'Detective Morgan',
-    description: 'Hard-boiled detective with a perfect case record and troubled past',
-    image: require('../assets/character/professional4.png'),
-    tags: ['Detective', 'Sharp', 'Tenacious', 'Mysterious'],
-    followers: '10.5M',
-    category: 'Professional'
-  },
-  {
-    id: 'professional5',
-    name: 'Astronaut Zhang',
-    description: 'Pioneering astronaut who has made incredible discoveries in deep space',
-    image: require('../assets/character/professional5.png'),
-    tags: ['Astronaut', 'Explorer', 'Brave', 'Scientific'],
-    followers: '12.3M',
-    category: 'Professional'
-  },
-  
-  // Fictional Characters
-  {
-    id: 'fictional1',
-    name: 'Sherlock Holmes',
-    description: 'The legendary detective with extraordinary powers of observation and deduction',
-    image: require('../assets/character/fictional1.png'),
-    tags: ['Detective', 'Genius', 'Observant', 'Eccentric'],
-    followers: '19.8M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional2',
-    name: 'Elizabeth Bennet',
-    description: 'The witty and independent protagonist from Pride and Prejudice',
-    image: require('../assets/character/fictional2.png'),
-    tags: ['Witty', 'Independent', 'Intelligent', 'Spirited'],
-    followers: '8.4M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional3',
-    name: 'Jay Gatsby',
-    description: 'The mysterious millionaire with a passionate obsession for his former love',
-    image: require('../assets/character/fictional3.png'),
-    tags: ['Wealthy', 'Mysterious', 'Romantic', 'Tragic'],
-    followers: '9.2M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional4',
-    name: 'Atticus Finch',
-    description: 'The moral hero of To Kill a Mockingbird, fighting for justice in the American South',
-    image: require('../assets/character/fictional4.png'),
-    tags: ['Lawyer', 'Honorable', 'Wise', 'Compassionate'],
-    followers: '7.5M',
-    category: 'Fictional'
-  },
-  {
-    id: 'fictional5',
-    name: 'Captain Ahab',
-    description: 'The obsessed captain hunting the white whale that took his leg',
-    image: require('../assets/character/fictional5.png'),
-    tags: ['Captain', 'Obsessed', 'Vengeful', 'Determined'],
-    followers: '6.8M',
-    category: 'Fictional'
-  },
-  
-  // Anime Characters
-  {
-    id: 'anime1',
-    name: 'Spike Spiegel',
-    description: 'Former hitman turned bounty hunter with a cool attitude and dark past',
+    id: 'math',
+    name: 'Math',
+    description: 'Quickly solve math problems',
     image: require('../assets/character/anime1.png'),
-    tags: ['Bounty Hunter', 'Cool', 'Fighter', 'Mysterious'],
-    followers: '13.7M',
-    category: 'Anime'
+    tags: ['Calculations', 'Formulas', 'Equations'],
+    category: 'Education',
+    suggestedQuestions: [
+      "How do I solve quadratic equations?",
+      "What's the best way to learn calculus?",
+      "How can I improve my mental math skills?",
+      "What are some real-world applications of algebra?"
+    ]
   },
   {
-    id: 'anime2',
-    name: 'Sailor Moon',
-    description: 'Magical girl who transforms to fight for love and justice',
+    id: 'ai-learning',
+    name: 'AI Learning',
+    description: 'Study any subject with ease',
     image: require('../assets/character/anime2.png'),
-    tags: ['Magical Girl', 'Hero', 'Loving', 'Powerful'],
-    followers: '15.9M',
-    category: 'Anime'
+    tags: ['Tutoring', 'Knowledge', 'Study'],
+    category: 'Education',
+    suggestedQuestions: [
+      "How can AI help me learn more effectively?",
+      "What are the best AI learning tools?",
+      "How do I create a personalized learning plan with AI?",
+      "What subjects are best suited for AI-assisted learning?"
+    ]
   },
   {
-    id: 'anime3',
-    name: 'Goku',
-    description: 'Super-powered Saiyan warrior who constantly seeks greater strength',
+    id: 'school',
+    name: 'School',
+    description: 'Get help with homework',
     image: require('../assets/character/anime3.png'),
-    tags: ['Fighter', 'Powerful', 'Optimistic', 'Hero'],
-    followers: '24.6M',
-    category: 'Anime'
+    tags: ['Assignments', 'Projects', 'Research'],
+    category: 'Education',
+    suggestedQuestions: [
+      "How can I improve my study habits?",
+      "What's the best way to take notes?",
+      "How do I manage my homework workload?",
+      "What strategies help with test preparation?"
+    ]
   },
   {
-    id: 'anime4',
-    name: 'Levi Ackerman',
-    description: 'Humanity\'s strongest soldier with an intense focus on duty',
+    id: 'social-media',
+    name: 'Social Media',
+    description: 'Create content for social media',
     image: require('../assets/character/anime4.png'),
-    tags: ['Soldier', 'Strong', 'Serious', 'Skilled'],
-    followers: '19.2M',
-    category: 'Anime'
+    tags: ['Posts', 'Captions', 'Marketing'],
+    category: 'Marketing',
+    suggestedQuestions: [
+      "How can I grow my social media following?",
+      "What types of content perform best on Instagram?",
+      "How do I write engaging captions?",
+      "What's the best time to post on different platforms?"
+    ]
   },
   {
-    id: 'anime5',
-    name: 'Mikasa Ackerman',
-    description: 'Extremely skilled fighter with unwavering loyalty to those she loves',
+    id: 'quote-maker',
+    name: 'Quote Maker',
+    description: 'Find a quote for any occasion',
     image: require('../assets/character/anime5.png'),
-    tags: ['Soldier', 'Loyal', 'Skilled', 'Protective'],
-    followers: '17.8M',
-    category: 'Anime'
+    tags: ['Inspiration', 'Wisdom', 'Sayings'],
+    category: 'Creative',
+    suggestedQuestions: [
+      "What are some inspirational quotes about success?",
+      "Can you suggest motivational quotes for tough times?",
+      "What are famous quotes about love?",
+      "How can I create my own meaningful quotes?"
+    ]
   },
-  
-  // Celebrity Characters
   {
-    id: 'celebrity1',
-    name: 'Marilyn Monroe',
-    description: 'Iconic actress and model of the Golden Age of Hollywood',
+    id: 'ai-scanner',
+    name: 'AI Scanner',
+    description: 'Scan and extract text from docs',
     image: require('../assets/character/celebrity1.png'),
-    tags: ['Actress', 'Icon', 'Glamorous', 'Mysterious'],
-    followers: '20.3M',
-    category: 'Celebrity'
+    tags: ['OCR', 'Documents', 'Text'],
+    category: 'Productivity',
+    suggestedQuestions: [
+      "How accurate is the text extraction?",
+      "What file formats does the scanner support?",
+      "Can it recognize handwriting?",
+      "How does it handle poor quality documents?"
+    ]
   },
   {
-    id: 'celebrity2',
-    name: 'Elvis Presley',
-    description: 'The King of Rock and Roll who changed music forever',
+    id: 'translator',
+    name: 'Translator',
+    description: 'Break language barriers on the go',
     image: require('../assets/character/celebrity2.png'),
-    tags: ['Musician', 'Icon', 'King', 'Charismatic'],
-    followers: '18.5M',
-    category: 'Celebrity'
-  },
-  {
-    id: 'celebrity3',
-    name: 'Audrey Hepburn',
-    description: 'Elegant film and fashion icon known for her humanitarian work',
-    image: require('../assets/character/celebrity3.png'),
-    tags: ['Actress', 'Elegant', 'Icon', 'Humanitarian'],
-    followers: '16.2M',
-    category: 'Celebrity'
-  },
-  {
-    id: 'celebrity4',
-    name: 'Bruce Lee',
-    description: 'Legendary martial artist and actor who revolutionized action cinema',
-    image: require('../assets/character/celebrity4.png'),
-    tags: ['Martial Artist', 'Actor', 'Philosopher', 'Icon'],
-    followers: '21.7M',
-    category: 'Celebrity'
-  },
-  {
-    id: 'celebrity5',
-    name: 'Frida Kahlo',
-    description: 'Revolutionary Mexican artist known for her unique style and self-portraits',
-    image: require('../assets/character/celebrity5.png'),
-    tags: ['Artist', 'Iconic', 'Revolutionary', 'Passionate'],
-    followers: '14.9M',
-    category: 'Celebrity'
-  },
-  
-  // Scientist Characters
-  {
-    id: 'scientists1',
-    name: 'Albert Einstein',
-    description: 'Revolutionary physicist who developed the theory of relativity',
-    image: require('../assets/character/scientists1.png'),
-    tags: ['Genius', 'Physicist', 'Revolutionary', 'Eccentric'],
-    followers: '22.1M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists2',
-    name: 'Marie Curie',
-    description: 'Pioneering physicist and chemist who discovered radium and polonium',
-    image: require('../assets/character/scientists2.png'),
-    tags: ['Nobel Prize', 'Physicist', 'Chemist', 'Pioneer'],
-    followers: '17.3M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists3',
-    name: 'Isaac Newton',
-    description: 'Mathematician, physicist, and astronomer who formulated the laws of motion and gravity',
-    image: require('../assets/character/scientists3.png'),
-    tags: ['Genius', 'Mathematician', 'Physicist', 'Discoverer'],
-    followers: '15.8M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists4',
-    name: 'Nikola Tesla',
-    description: 'Brilliant inventor who pioneered electrical engineering',
-    image: require('../assets/character/scientists4.png'),
-    tags: ['Inventor', 'Genius', 'Visionary', 'Eccentric'],
-    followers: '19.5M',
-    category: 'Scientists'
-  },
-  {
-    id: 'scientists5',
-    name: 'Ada Lovelace',
-    description: 'First computer programmer and visionary who foresaw the potential of computing machines',
-    image: require('../assets/character/scientists5.png'),
-    tags: ['Programmer', 'Visionary', 'Mathematician', 'Pioneer'],
-    followers: '13.6M',
-    category: 'Scientists'
-  },
+    tags: ['Languages', 'Communication', 'Global'],
+    category: 'Productivity',
+    suggestedQuestions: [
+      "How many languages does the translator support?",
+      "Can it translate spoken conversations in real-time?",
+      "How accurate are the translations?",
+      "Does it work offline for common languages?"
+    ]
+  }
 ];
 
-// Categories for the horizontal scroll
-const CATEGORIES = [
-  { id: 'all', name: 'All', selected: true },
-  { id: 'original', name: 'Original', selected: false },
-  { id: 'fantasy', name: 'Fantasy', selected: false },
-  { id: 'historical', name: 'Historical', selected: false },
-  { id: 'professional', name: 'Professional', selected: false },
-  { id: 'fictional', name: 'Fictional', selected: false },
-  { id: 'anime', name: 'Anime', selected: false },
-  { id: 'celebrity', name: 'Celebrity', selected: false },
-  { id: 'scientists', name: 'Scientists', selected: false },
+// Initial categories data
+const INITIAL_CATEGORIES: Category[] = [
+  { id: 'all', name: 'All' },
+  { id: 'life', name: 'Life' },
+  { id: 'health', name: 'Health' },
+  { id: 'work', name: 'Work' },
+  { id: 'creative', name: 'Creative' },
+  { id: 'education', name: 'Education' },
+  { id: 'marketing', name: 'Marketing' },
+  { id: 'productivity', name: 'Productivity' },
+  { id: 'entertainment', name: 'Entertainment' },
 ];
 
-export default function HomeScreen({ navigation }) {
+// Icon mapping for assistants
+const ASSISTANT_ICONS: { [key: string]: { name: keyof typeof Ionicons.glyphMap; color: string } } = {
+  'self-growth': { name: 'ribbon-outline', color: '#34D399' },
+  'lifestyle': { name: 'sunny-outline', color: '#FBBF24' },
+  'spirituality': { name: 'sparkles-outline', color: '#A78BFA' },
+  'fitness': { name: 'barbell-outline', color: '#EF4444' },
+  'career': { name: 'briefcase-outline', color: '#60A5FA' },
+  'emails': { name: 'mail-outline', color: '#93C5FD' },
+  'lyrics-poetry': { name: 'musical-notes-outline', color: '#F472B6' },
+  'fun': { name: 'game-controller-outline', color: '#EC4899' },
+  'link-ask': { name: 'link-outline', color: '#2DD4BF' },
+  'languages': { name: 'language-outline', color: '#818CF8' },
+  'math': { name: 'calculator-outline', color: '#F87171' },
+  'ai-learning': { name: 'school-outline', color: '#6EE7B7' },
+  'school': { name: 'library-outline', color: '#FCD34D' },
+  'social-media': { name: 'share-social-outline', color: '#A5B4FC' },
+  'quote-maker': { name: 'chatbubble-ellipses-outline', color: '#C4B5FD' },
+  'ai-scanner': { name: 'scan-outline', color: '#7DD3FC' },
+  'translator': { name: 'swap-horizontal-outline', color: '#FDA4AF' },
+};
+
+// --- Helper Components ---
+
+interface CategoryButtonProps {
+  item: Category;
+  isSelected: boolean;
+  onPress: (id: string) => void;
+  colors: { categorySelected: string; categoryBg: string; subText: string; };
+}
+
+const CategoryButton = React.memo(({ item, isSelected, onPress, colors }: CategoryButtonProps) => (
+  <TouchableOpacity
+    style={[
+      styles.categoryItem,
+      { backgroundColor: isSelected ? colors.categorySelected : colors.categoryBg },
+      isSelected && styles.categoryItemSelected // Keep for potential specific selected styles
+    ]}
+    onPress={() => onPress(item.id)}
+    accessibilityRole="button"
+    accessibilityState={{ selected: isSelected }}
+    accessibilityLabel={item.name}
+  >
+    <Text
+      style={[
+        styles.categoryText,
+        { color: isSelected ? '#FFFFFF' : colors.subText },
+        isSelected && styles.categoryTextSelected // Keep for potential specific selected styles
+      ]}
+    >
+      {item.name}
+    </Text>
+  </TouchableOpacity>
+));
+
+interface AssistantCardProps {
+  item: Assistant;
+  onPress: (assistant: Assistant) => void;
+  colors: { text: string; subText: string; accent: string; }; // Added accent color
+  isDarkMode: boolean;
+}
+
+const AssistantCard = React.memo(({ item, onPress, colors, isDarkMode }: AssistantCardProps) => {
+  const iconInfo = ASSISTANT_ICONS[item.id] || { name: 'help-circle-outline', color: colors.accent }; // Use accent color as fallback
+
+  return (
+    <View style={{ width: COLUMN_WIDTH }}>
+      <Pressable
+        style={[
+          styles.assistantCard, // Renamed from toolCard
+          isDarkMode ? styles.darkCard : styles.lightCard
+        ]}
+        onPress={() => onPress(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}. ${item.description}`}
+      >
+        {/* Icon Container */}
+        <View style={[styles.iconContainer, { backgroundColor: iconInfo.color }]}>
+          <Ionicons
+            name={iconInfo.name}
+            size={32}
+            color="#FFFFFF" // Keep icon color white for contrast
+          />
+        </View>
+
+        {/* Assistant Info */}
+        <View style={styles.assistantInfo}>
+          <Text style={[styles.assistantName, { color: colors.text }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={[styles.assistantDescription, { color: colors.subText }]} numberOfLines={2}>
+            {item.description}
+          </Text>
+        </View>
+      </Pressable>
+    </View>
+  );
+});
+
+// --- Main Component ---
+
+export default function HomeScreen() {
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const { isDarkMode } = useContext(ThemeContext);
-  const { isGuest, shouldShowDiscountOffer, markDiscountOfferShown, signOut } = useAuth();
-  const [categories, setCategories] = useState(CATEGORIES);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const searchInputRef = useRef(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  
+  const { isGuest, shouldShowDiscountOffer, markDiscountOfferShown } = useAuth(); // Removed unused signOut
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  // Removed unused: searchInputRef (no focus trigger shown), isRefreshing, toolAnimationRefs
+
   // Dynamic colors based on theme
   const colors = {
     background: isDarkMode ? '#121212' : '#FFFFFF',
     text: isDarkMode ? '#FFFFFF' : '#000000',
     subText: isDarkMode ? '#AAAAAA' : '#666666',
-    card: isDarkMode ? '#1E1E1E' : '#F5F5F5',
+    card: isDarkMode ? '#1E1E1E' : '#FFFFFF',
     cardBorder: isDarkMode ? '#333333' : '#E0E0E0',
-    accent: isDarkMode ? '#3D8CFF' : '#7E3AF2',
+    accent: isDarkMode ? '#3D8CFF' : '#7E3AF2', // Keep accent for fallback icon color
     categoryBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
     categorySelected: isDarkMode ? '#3D8CFF' : '#7E3AF2',
-    categoryText: isDarkMode ? '#FFFFFF' : '#000000',
+    categoryText: isDarkMode ? '#FFFFFF' : '#000000', // Keep for potential direct use
     searchBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
-    tagBg: isDarkMode ? 'rgba(79,70,229,0.15)' : 'rgba(126,58,242,0.1)',
-    tagText: isDarkMode ? '#3D8CFF' : '#7E3AF2',
-    buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0',
+    // buttonBg: isDarkMode ? '#2A2A2A' : '#F0F0F0', // Removed unused buttonBg
   };
 
-  const handleCategoryPress = (selectedId) => {
-    const updated = categories.map(cat => ({
-      ...cat,
-      selected: cat.id === selectedId
-    }));
-    setCategories(updated);
+  // Memoized category press handler
+  const handleCategoryPress = useCallback((selectedId: string) => {
     setSelectedCategory(selectedId);
-  };
+  }, []);
 
-  const handleCharacterPress = async (character) => {
+  // Memoized assistant press handler (renamed from handleToolPress)
+  const handleAssistantPress = useCallback(async (assistant: Assistant) => {
+    const iconInfo = ASSISTANT_ICONS[assistant.id] || { name: 'help-circle-outline', color: colors.accent };
+    const characterData: CharacterParams = {
+      id: assistant.id,
+      name: assistant.name,
+      avatar: assistant.image, // Keep image for Chat screen compatibility
+      description: assistant.description,
+      tags: assistant.tags,
+      category: assistant.category,
+      iconName: iconInfo.name,
+      iconColor: iconInfo.color,
+    };
+
+    // Check for discount offer only for guest users
     if (isGuest) {
-      // For guest users, check if we should show the discount offer
       try {
         const shouldShow = await shouldShowDiscountOffer();
-        
         if (shouldShow) {
-          console.log('Showing discount offer screen');
-          // Mark that we've shown the offer today
+          console.log('Showing discount offer screen for guest');
           await markDiscountOfferShown();
-          // Navigate to discount offer screen
-          navigation.navigate('DiscountOfferScreen', { fromCharacter: true, character });
-          return;
+          navigation.navigate('DiscountOfferScreen', {
+            fromCharacter: true, // Indicate origin
+            character: characterData
+          });
+          return; // Stop execution if navigating to discount screen
         }
       } catch (error) {
-        console.error('Error checking discount offer status:', error);
+        // Log error but proceed to chat screen as a fallback
+        console.error('Error checking/showing discount offer:', error);
+        // Optionally use a logging service here: loggingService.error('Discount check failed', error);
       }
     }
-    
-    // Otherwise proceed to chat
-    navigation.navigate('Chat', { character });
-  };
 
-  const navigateToProfile = () => {
-    navigation.navigate('Profile');
-  };
+    // Navigate to Chat screen for logged-in users or guests who didn't see the offer
+    navigation.navigate('Chat', {
+      character: characterData
+    });
+  }, [isGuest, navigation, shouldShowDiscountOffer, markDiscountOfferShown, colors.accent]); // Added dependencies
 
-  const navigateToHelpCenter = () => {
-    navigation.navigate('HelpCenter');
-  };
-
-  const focusSearchInput = () => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  };
-
-  const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity 
-      style={[
-        styles.categoryItem, 
-        { backgroundColor: item.selected ? colors.categorySelected : colors.categoryBg },
-        item.selected && styles.categoryItemSelected
-      ]} 
-      onPress={() => handleCategoryPress(item.id)}
-    >
-      <Text 
-        style={[
-          styles.categoryText, 
-          { color: item.selected ? '#FFFFFF' : colors.subText },
-          item.selected && styles.categoryTextSelected
-        ]}
-      >
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+  // Filter assistants based on selected category and search query
+  const filteredAssistants = ASSISTANTS.filter(assistant =>
+    (selectedCategory === 'all' || assistant.category.toLowerCase() === selectedCategory.toLowerCase()) &&
+    (searchQuery === '' ||
+      assistant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      assistant.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      assistant.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
   );
 
-  const renderTagItem = (tag) => (
-    <View key={tag} style={[styles.tagItem, { backgroundColor: colors.tagBg }]}>
-      <Text style={[styles.tagText, { color: colors.tagText }]}>{tag}</Text>
+  // Render function for category items (uses memoized component)
+  const renderCategoryItem = useCallback(({ item }: { item: Category }) => (
+    <CategoryButton
+      item={item}
+      isSelected={selectedCategory === item.id}
+      onPress={handleCategoryPress}
+      colors={colors}
+    />
+  ), [selectedCategory, handleCategoryPress, colors]); // Added dependencies
+
+  // Render function for assistant items (uses memoized component)
+  const renderAssistantItem = useCallback(({ item }: { item: Assistant }) => (
+    <AssistantCard
+      item={item}
+      onPress={handleAssistantPress}
+      colors={{ text: colors.text, subText: colors.subText, accent: colors.accent }} // Pass accent color
+      isDarkMode={isDarkMode}
+    />
+  ), [handleAssistantPress, colors, isDarkMode]); // Added dependencies
+
+  // Component to render when the list is empty
+  const ListEmptyComponent = () => (
+    <View style={styles.emptyStateContainer}>
+      {/* Optional: Add an image here */}
+      {/* <Image source={require('../assets/empty-search.png')} style={styles.emptyStateImage} /> */}
+      <Text style={[styles.emptyStateTitle, { color: colors.text }]}>No Assistants Found</Text>
+      <Text style={[styles.emptyStateMessage, { color: colors.subText }]}>
+        {searchQuery
+          ? `Try adjusting your search query or selecting a different category.`
+          : `There are no assistants matching the selected category.`}
+      </Text>
     </View>
   );
-
-  const renderCharacterItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.characterCard,
-        { width: COLUMN_WIDTH },
-        isDarkMode ? styles.darkCard : styles.lightCard
-      ]}
-      onPress={() => handleCharacterPress(item)}
-      activeOpacity={0.8}
-    >
-      <View style={styles.characterImageContainer}>
-        <Image source={item.image} style={styles.characterImage} />
-        <View style={[styles.categoryTag, { backgroundColor: colors.accent }]}>
-          <Text style={[styles.categoryTagText, { color: '#FFFFFF' }]}>{item.category}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.characterInfo}>
-        <Text style={[styles.characterName, { color: colors.text }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        
-        <Text style={[styles.characterDescription, { color: colors.subText }]} numberOfLines={2}>
-          {item.description}
-        </Text>
-        
-        <View style={styles.tagsContainer}>
-          {item.tags.slice(0, 3).map((tag) => renderTagItem(tag))}
-        </View>
-        
-        <View style={styles.characterMeta}>
-          <View style={styles.followerCount}>
-            <Ionicons name="people-outline" size={14} color={colors.subText} />
-            <Text style={[styles.followerText, { color: colors.subText }]}>
-              {item.followers}
-            </Text>
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.chatButton, { backgroundColor: colors.accent }]} 
-            onPress={() => handleCharacterPress(item)}
-          >
-            <Text style={styles.chatButtonText}>Chat</Text>
-            <Ionicons name="chatbubble-outline" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const filteredCharacters = searchQuery 
-    ? CHARACTERS.filter(char => 
-        (selectedCategory === 'all' || char.category.toLowerCase() === selectedCategory.toLowerCase()) &&
-        (char.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        char.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        char.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
-      )
-    : selectedCategory === 'all' 
-      ? CHARACTERS 
-      : CHARACTERS.filter(char => char.category.toLowerCase() === selectedCategory.toLowerCase());
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      
+
+      {/* Header */}
       <View style={[styles.header, isDarkMode ? styles.darkHeader : styles.lightHeader]}>
         <View style={styles.headerLeft}>
-          <Image source={require('../assets/logo.png')} style={styles.logo} />
           <Text style={[styles.appName, isDarkMode ? styles.darkAppName : styles.lightAppName]}>
-            Fantasy AI
+            AI Assistants {/* Updated Header Text */}
           </Text>
         </View>
+        {/* Removed unused profile icon */}
       </View>
-      
-      <View style={[styles.searchContainer, { backgroundColor: colors.searchBg }]}>
-        <Ionicons name="search-outline" size={18} color={colors.subText} style={{marginRight: 8}} />
+
+      {/* Search Bar */}
+      <View style={[styles.searchContainer, isDarkMode ? styles.darkSearchContainer : styles.lightSearchContainer]}>
+        <Ionicons name="search-outline" size={18} color={colors.subText} style={styles.searchIconStyle} />
         <TextInput
-          ref={searchInputRef}
+          // ref={searchInputRef} // Ref removed as focus trigger is gone
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search characters..."
+          placeholder="Search AI assistants..."
           placeholderTextColor={colors.subText}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
+          <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search query">
             <Ionicons name="close-circle" size={18} color={colors.subText} />
           </TouchableOpacity>
         )}
       </View>
-      
+
+      {/* Categories */}
       <View style={styles.categoriesContainer}>
         <FlatList
-          data={categories}
+          data={INITIAL_CATEGORIES} // Use initial categories data
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id}
           horizontal
@@ -660,33 +594,34 @@ export default function HomeScreen({ navigation }) {
           contentContainerStyle={styles.categoriesList}
         />
       </View>
-      
+
+      {/* Assistants List */}
       <FlatList
-        data={filteredCharacters}
-        renderItem={renderCharacterItem}
+        data={filteredAssistants}
+        renderItem={renderAssistantItem}
         keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.charactersList}
+        numColumns={NUM_COLUMNS}
+        contentContainerStyle={styles.assistantsList} // Renamed from toolsList
         showsVerticalScrollIndicator={false}
         columnWrapperStyle={styles.columnWrapper}
+        ListEmptyComponent={ListEmptyComponent} // Added empty state component
+        keyboardShouldPersistTaps="handled" // Dismiss keyboard on tap outside input
       />
     </SafeAreaView>
   );
 }
 
+// --- Styles ---
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  darkContainer: {
-    backgroundColor: '#121212',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: PADDING_HORIZONTAL,
     paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
@@ -703,14 +638,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logo: {
-    width: 32,
-    height: 32,
-    marginRight: 8,
-  },
   appName: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '600',
   },
   darkAppName: {
     color: '#FFFFFF',
@@ -721,13 +651,14 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 20,
+    marginHorizontal: PADDING_HORIZONTAL,
     marginTop: 16,
     marginBottom: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 1,
+    // borderColor managed by theme styles
   },
   darkSearchContainer: {
     backgroundColor: '#2A2A2A',
@@ -737,60 +668,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderColor: '#EEEEEE',
   },
-  searchIcon: {
+  searchIconStyle: { // Added specific style for margin
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-  },
-  darkSearchInput: {
-    color: '#FFFFFF',
-  },
-  lightSearchInput: {
-    color: '#000000',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  darkSectionTitle: {
-    color: '#FFFFFF',
-  },
-  lightSectionTitle: {
-    color: '#000000',
-  },
-  viewAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewAllText: {
-    fontSize: 14,
-    marginRight: 4,
-  },
-  darkViewAllText: {
-    color: '#0070F3',
-  },
-  lightViewAllText: {
-    color: '#0070F3',
-  },
-  categoriesList: {
-    paddingLeft: 20,
-    marginBottom: 16,
+    // color managed by theme
   },
   categoriesContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 8,
+    // No specific styles needed, FlatList handles layout
+  },
+  categoriesList: {
+    paddingHorizontal: PADDING_HORIZONTAL,
+    paddingBottom: 16, // Added padding bottom for spacing
   },
   categoryItem: {
     paddingHorizontal: 16,
@@ -799,159 +690,88 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   categoryItemSelected: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 12,
+    // Specific styles for selected item if needed beyond background color
   },
   categoryText: {
     fontSize: 14,
     fontWeight: '500',
   },
   categoryTextSelected: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600', // Make selected bolder
   },
-  charactersList: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+  assistantsList: { // Renamed from toolsList
+    paddingHorizontal: PADDING_HORIZONTAL,
+    paddingBottom: 24, // Ensure content doesn't hide behind potential tab bar
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    marginBottom: GAP, // Apply gap between rows here
   },
-  characterCard: {
-    marginBottom: 20,
-    borderRadius: 24,
+  assistantCard: { // Renamed from toolCard
+    // marginBottom handled by columnWrapper
+    borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4.65,
-    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2.22,
+    elevation: 3,
+    alignItems: 'flex-start', // Align content to the start
+    width: '100%', // Ensure card takes full column width allocated
   },
   darkCard: {
     backgroundColor: '#1E1E1E',
   },
   lightCard: {
     backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  characterImageContainer: {
-    position: 'relative',
-    height: 180,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-  },
-  characterImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  categoryTag: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  categoryTagText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  characterInfo: {
-    padding: 14,
-  },
-  characterName: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  characterDescription: {
-    fontSize: 13,
-    marginBottom: 10,
-    lineHeight: 18,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 10,
-  },
-  tagItem: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  characterMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  followerCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  followerText: {
-    marginLeft: 5,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  chatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+  iconContainer: {
+    width: 56,
+    height: 56,
     borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 14,
+    marginBottom: 8,
   },
-  chatButtonText: {
-    color: '#FFFFFF',
+  assistantInfo: { // Renamed from toolInfo
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 0,
+    alignSelf: 'stretch', // Ensure it takes width
+  },
+  assistantName: { // Renamed from toolName
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 5,
+    textAlign: 'left',
+  },
+  assistantDescription: { // Renamed from toolDescription
     fontSize: 12,
-    fontWeight: '600',
+    lineHeight: 16,
+    textAlign: 'left',
   },
   emptyStateContainer: {
-    flex: 1,
+    flex: 1, // Take remaining space if list is short
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-  },
-  emptyStateImage: {
-    width: 120,
-    height: 120,
-    marginBottom: 20,
-    opacity: 0.7,
+    marginTop: 40, // Add space from categories/search
+    minHeight: 200, // Ensure it has some minimum height
   },
   emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 10,
+    fontSize: 18, // Adjusted size
+    fontWeight: '600', // Adjusted weight
+    marginBottom: 8, // Adjusted spacing
     textAlign: 'center',
   },
   emptyStateMessage: {
-    fontSize: 16,
+    fontSize: 14, // Adjusted size
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 24,
+    lineHeight: 20, // Adjusted line height
+    // color managed by theme
   },
-  actionButton: {
-    backgroundColor: '#0070F3',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-}); 
+  // Removed unused styles: actionButton, actionButtonText, toolImageContainer, etc.
+});

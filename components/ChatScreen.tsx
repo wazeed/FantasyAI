@@ -1,45 +1,69 @@
-import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback, useMemo } from 'react';
+import { LogBox } from 'react-native';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TextInput,
-  TouchableOpacity,
   Image,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   SafeAreaView,
   Keyboard,
   Modal,
   ImageBackground,
   Animated,
-  Alert,
+  Alert, // Re-added for permissions/file errors
+  Pressable, // Re-added for buttons
+  ImageSourcePropType,
+  ActivityIndicator, // Re-added for loading states
+  GestureResponderEvent, // For typing Pressable events
 } from 'react-native';
+// import { GiftedChat, IMessage } from 'react-native-gifted-chat'; // Removed - Using custom FlatList
+import * as ImagePicker from 'expo-image-picker'; // Keep for image selection (input)
+// import { Audio, Recording } from 'expo-av'; // Keep Recording for input, remove Audio for playback
+import { Audio } from 'expo-av'; // Keep Audio for Recording permissions/instance
+import * as FileSystem from 'expo-file-system'; // Import FileSystem
+// import { Image as ExpoImage } from 'expo-image'; // Removed - No longer displaying images in messages
+import { supabase } from '../utils/supabase'; // Import Supabase client
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, ParamListBase } from '@react-navigation/native';
+import { v4 as uuidv4 } from 'uuid'; // Added for unique ID generation
+// import { Ionicons } from '@expo/vector-icons'; // Removed - Mic/Attach icons handled elsewhere or removed if only for audio play
+// Re-import if needed for other icons like back arrow, theme selector etc. - Check ChatHeader/ChatInput usage
+import { Ionicons } from '@expo/vector-icons'; // Keeping for now, likely used in header/input
+import { ParamListBase, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import {
-  createConversation,
-  getConversation,
-  getConversationMessages,
+  getChatMessages,
   sendMessage as sendMessageToDb,
-  Message as DbMessage
+  subscribeToNewMessages,
+  unsubscribeFromChat,
+  Message, // Import the correct Message type
 } from '../services/conversationService';
-import { recordCharacterInteraction } from '../services/characterService';
-import { v4 as uuidv4 } from 'uuid';
+import * as Crypto from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Define navigation types for this component
-// Match the RootStackParamList from App.tsx
+// --- Types and Interfaces ---
+
+type GuestChatSessionData = {
+  id: number;
+  characterId: number;
+  name: string;
+  avatar: string | number | null; // Keep consistent with Character type
+  lastMessage: string;
+  lastInteractionAt: string;
+};
+
+// Define RootStackParamList based on project structure/navigation needs
 type RootStackParamList = {
   Login: undefined;
   EmailSignIn: { isSignUp?: boolean };
   MainTabs: undefined;
   Onboarding: undefined;
-  Chat: { character: any };
+  Chat: { character: Character };
   EditProfile: undefined;
   Settings: undefined;
   PrivacySettings: undefined;
@@ -55,22 +79,125 @@ type RootStackParamList = {
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Chat'>;
+type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
-type Message = {
-  id: string;
-  text: string;
+interface Character {
+  id: number;
+  name: string;
+  description?: string;
+  avatar: ImageSourcePropType | string; // Allow string for URI
+  tags?: string[];
+  category?: string;
+  openingMessage?: string;
+  exampleQuestions?: string[];
+  greeting?: string;
+  image_url?: string; // Keep for potential use
+}
+
+interface UIMessage {
+  id: string | number;
+  text: string; // Keep text for potential captions or fallbacks
   sender: 'user' | 'ai';
   timestamp: number;
+  image_url?: string;
+  audio_url?: string; // Add optional audio URL
+}
+
+interface ChatScreenProps {
+  route: ChatScreenRouteProp;
+  navigation: NavigationProp;
+}
+
+interface MessageItemProps {
+  item: UIMessage;
+  characterAvatar: ImageSourcePropType | string;
+  colors: ReturnType<typeof useDynamicColors>;
+  isDarkMode: boolean;
+  animation: { fadeAnim: Animated.Value; slideAnim: Animated.Value; scaleAnim: Animated.Value };
+}
+
+// Removed comments related to unused imports (Alert, Audio, ActivityIndicator)
+
+interface ChatInputProps {
+  inputText: string;
+  setInputText: (text: string) => void;
+  handleSend: () => void;
+  isAISpeaking: boolean;
+  colors: ReturnType<typeof useDynamicColors>;
+  sendButtonScale: Animated.Value;
+  handlePressInSend: () => void;
+  handlePressOutSend: () => void;
+  onMicPress?: () => void; // Added microphone press handler prop
+  onAttachPress?: () => void; // Added attachment press handler prop
+  stagedMedia: StagedMedia | null; // Add staged media state prop
+  clearStagedMedia: () => void; // Add function to clear staged media
+}
+
+interface ChatHeaderProps {
+  character: Character;
+  colors: ReturnType<typeof useDynamicColors>;
+  handleBack: () => void;
+  handleThemePress: () => void;
+}
+
+interface ThemeSelectorModalProps {
+  visible: boolean;
+  onClose: () => void;
+  themes: ChatTheme[];
+  selectedTheme: ChatTheme;
+  onSelectTheme: (theme: ChatTheme) => void;
+  colors: ReturnType<typeof useDynamicColors>;
+}
+
+interface TypingIndicatorDisplayProps {
+    character: Character;
+    colors: ReturnType<typeof useDynamicColors>;
+}
+
+interface GuestModeBannerProps {
+    colors: ReturnType<typeof useDynamicColors>;
+    onUpgradePress: () => void;
+}
+
+interface ChatTheme {
+  id: string;
+  name: string;
+  background: ImageSourcePropType | null;
+}
+
+interface StagedMedia {
+  uri: string;
+  base64: string;
+  type: 'image' | 'audio';
+  mimeType?: string; // Add optional mimeType
+}
+
+// Define the structure for OpenRouter message content
+type OpenRouterMessageContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } }
+      // Add other potential content types if needed
+    >;
+
+// Define the structure for an OpenRouter message
+interface OpenRouterMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: OpenRouterMessageContent;
+}
+
+// --- Constants ---
+
+const GUEST_CHATS_STORAGE_KEY = 'guestChats';
+const MESSAGE_ANIMATION_DURATION = 300;
+const FLATLIST_OPTIMIZATION_PROPS = {
+  initialNumToRender: 10,
+  maxToRenderPerBatch: 10,
+  windowSize: 11, // Default is 21, smaller might be better for chat
 };
 
-const TYPING_INDICATORS = [
-  'is typing',
-  'is typing.',
-  'is typing..',
-  'is typing...',
-];
-
-const CHAT_THEMES = [
+const CHAT_THEMES: ChatTheme[] = [
   { id: 'default', name: 'Default', background: null },
   { id: 'gradient1', name: 'Sunset', background: require('../assets/chat-bg/gradient1.png') },
   { id: 'gradient2', name: 'Ocean', background: require('../assets/chat-bg/gradient2.png') },
@@ -78,708 +205,1138 @@ const CHAT_THEMES = [
   { id: 'pattern2', name: 'Stars', background: require('../assets/chat-bg/pattern2.png') },
 ];
 
-const MESSAGE_ANIMATION_DURATION = 300;
+// --- Helper Functions (Outside Component) ---
 
-interface Character {
-  id: string;
-  name: string;
-  description?: string;
-  avatar: any; // Changed from image to avatar
-  tags?: string[];
-  category?: string;
+function mapDbMessageToUIMessage(dbMsg: Message): UIMessage { // Use the imported Message type
+  // Assuming DbMessage has an image_url field now
+  return {
+    id: dbMsg.id ?? Crypto.randomUUID(), // Use DB id if available, otherwise generate UUID
+    text: dbMsg.content ?? '[empty message]', // Use content directly, default if null/undefined
+    sender: (dbMsg.sender ?? 'ai') as 'user' | 'ai',
+    timestamp: dbMsg.created_at ? new Date(dbMsg.created_at).getTime() : Date.now(),
+    // image_url and audio_url are not present on the DB Message type, so omit them here.
+    // The UIMessage type allows them to be optional.
+  };
 }
 
-interface ChatScreenProps {
-  route: {
-    params: {
-      character: Character;
-      conversationId?: string;
+function generateWelcomeMessage(char: Character): string {
+  if (char.greeting) return char.greeting;
+  if (char.openingMessage) {
+    const questionList = (char.exampleQuestions || []).map((q: string) => `• ${q}`).join('\n');
+    return `${char.openingMessage}${questionList ? `\n\nHere are some things I can help with:\n${questionList}` : ''}`;
+  }
+  return `Hello! I'm ${char.name}. How can I help you today?`;
+}
+
+// Removed local fetchAIResponse function. Logic moved to Supabase Edge Function 'openrouter-proxy'.
+
+async function updateGuestChatSession(characterId: number, characterName: string, lastMessageText: string): Promise<void> {
+  if (isNaN(characterId) || characterId <= 0) return;
+  try {
+    const now = new Date().toISOString();
+    const currentChatsRaw = await AsyncStorage.getItem(GUEST_CHATS_STORAGE_KEY);
+    let currentChats: GuestChatSessionData[] = currentChatsRaw ? JSON.parse(currentChatsRaw) : [];
+
+    // Ensure currentChats is an array
+    if (!Array.isArray(currentChats)) {
+        console.warn('Guest chat data in AsyncStorage was not an array. Resetting.');
+        currentChats = [];
+    }
+
+    const existingIndex = currentChats.findIndex(chat => chat.characterId === characterId);
+    // Use characterId for id as well, assuming it's unique for guest sessions context
+    const sessionData: GuestChatSessionData = {
+        id: characterId,
+        characterId: characterId,
+        name: characterName,
+        avatar: null, // Avatar isn't stored/needed for guest list view currently
+        lastMessage: lastMessageText.substring(0, 100), // Limit length
+        lastInteractionAt: now
     };
-  };
-  navigation: NavigationProp;
+
+    if (existingIndex > -1) {
+      currentChats[existingIndex] = sessionData;
+    } else {
+      currentChats.push(sessionData);
+    }
+
+    // Sort by most recent interaction
+    currentChats.sort((a, b) => new Date(b.lastInteractionAt).getTime() - new Date(a.lastInteractionAt).getTime());
+
+    // Limit the number of stored guest chats
+    const limitedChats = currentChats.slice(0, 15);
+
+    await AsyncStorage.setItem(GUEST_CHATS_STORAGE_KEY, JSON.stringify(limitedChats));
+  } catch (error) {
+    console.error("Error updating guest chat session:", error);
+    // Optionally inform the user or log more details
+  }
 }
 
-export default function ChatScreen({ route, navigation }: ChatScreenProps) {
-  const { character, conversationId: existingConversationId } = route.params || {
-    character: { name: 'AI Assistant', avatar: require('../assets/char1.png') }
-  };
+// --- Dynamic Colors Hook ---
+const useDynamicColors = (isDarkMode: boolean) => {
+    return useMemo(() => ({
+        background: isDarkMode ? '#121212' : '#F8FAFC', // Slightly off-white light background
+        inputBackground: isDarkMode ? '#1E293B' : '#F1F5F9', // Light grey input light mode
+        text: isDarkMode ? '#E5E7EB' : '#1E293B', // Dark text light mode
+        subText: isDarkMode ? '#94A3B8' : '#64748B', // Grey text
+        userBubble: isDarkMode ? '#4F46E5' : '#38BDF8', // Indigo dark, Sky light
+        aiBubble: isDarkMode ? '#1E293B' : '#FFFFFF', // Dark grey dark, White light
+        aiBubbleShadow: isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)',
+        userText: '#FFFFFF', // White text on colored bubble
+        aiText: isDarkMode ? '#E5E7EB' : '#1E293B', // Light text dark, Dark text light
+        border: isDarkMode ? '#334155' : '#E2E8F0', // Slightly darker border dark, Light border light
+        sendButton: isDarkMode ? '#4F46E5' : '#3B82F6', // Indigo dark, Blue light
+        primary: isDarkMode ? '#6366F1' : '#3B82F6', // Brighter Indigo dark, Blue light
+        secondary: '#8B5CF6', // Purple accent
+        card: isDarkMode ? '#1E293B' : '#FFFFFF', // Dark grey card dark, White card light
+        accent: isDarkMode ? '#818CF8' : '#93C5FD', // Lighter Indigo dark, Lighter Blue light
+        avatarBorder: isDarkMode ? '#4F46E5' : '#FFFFFF', // Indigo border dark, White border light
+        messageTimestamp: isDarkMode ? '#64748B' : '#94A3B8', // Grey timestamp
+        typingIndicator: isDarkMode ? '#94A3B8' : '#64748B', // Grey typing indicator
+        themePreviewBorder: 'rgba(0,0,0,0.1)', // Static light border for theme preview
+        themeSelectedBorder: isDarkMode ? '#6366F1' : '#3B82F6', // Primary color for selected theme
+        closeButton: isDarkMode ? '#E5E7EB' : '#1E293B', // Text color for close button
+    }), [isDarkMode]);
+};
 
-  const { user, isGuest, incrementGuestMessageCount, shouldShowSubscriptionOffer } = useAuth();
-  const { isDarkMode } = useContext(ThemeContext);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [typingIndicator, setTypingIndicator] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
-  const [selectedTheme, setSelectedTheme] = useState(CHAT_THEMES[0]);
-  const [showThemeSelector, setShowThemeSelector] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(existingConversationId || null);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [showCloseButton, setShowCloseButton] = useState(false);
 
-  // Initialize animation values for messages
-  const [messageAnimations, setMessageAnimations] = useState(new Map());
+// --- Subcomponents ---
 
-  // Dynamic colors based on theme
-  const colors = {
-    background: isDarkMode ? '#121212' : '#F8FAFC',
-    inputBackground: isDarkMode ? '#1E293B' : '#F1F5F9',
-    text: isDarkMode ? '#E5E7EB' : '#1E293B',
-    subText: isDarkMode ? '#94A3B8' : '#64748B',
-    userBubble: isDarkMode ? '#4F46E5' : '#38BDF8',
-    aiBubble: isDarkMode ? '#1E293B' : '#FFFFFF',
-    userText: '#FFFFFF', // User text always white
-    aiText: isDarkMode ? '#FFFFFF' : '#1E293B', // AI text white in dark mode
-    border: isDarkMode ? '#1E293B' : '#E2E8F0',
-    sendButton: isDarkMode ? '#4F46E5' : '#3B82F6',
-    primary: isDarkMode ? '#4F46E5' : '#3B82F6',
-    secondary: '#8B5CF6',
-    card: isDarkMode ? '#1E293B' : '#FFFFFF',
-    accent: isDarkMode ? '#818CF8' : '#93C5FD',
-    userIconColor: isDarkMode ? '#818CF8' : '#3B82F6',
-    avatarBorder: isDarkMode ? '#4F46E5' : '#FFFFFF', // Conditional border for avatar
-  };
+const TypingIndicator = React.memo(({ color }: { color: string }) => {
+  const yAnims = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
 
-  // Load conversation and messages
   useEffect(() => {
-    const loadConversation = async () => {
+    const createAnimation = (anim: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, { toValue: -5, duration: 300, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.delay(600),
+        ])
+      );
+    };
+    const animations = yAnims.map((anim, index) => createAnimation(anim, index * 150));
+    Animated.parallel(animations).start();
+    return () => animations.forEach(anim => anim.stop());
+  }, [yAnims]); // yAnims is stable
+
+  return (
+    <View style={styles.typingDotsContainer}>
+      {yAnims.map((anim, index) => (
+        <Animated.View
+          key={index}
+          style={[ styles.typingDot, { backgroundColor: color, transform: [{ translateY: anim }] } ]}
+        />
+      ))}
+    </View>
+  );
+});
+
+const TypingIndicatorDisplay = React.memo(({ character, colors }: TypingIndicatorDisplayProps) => {
+    const getAvatarSource = (avatar: Character['avatar']): ImageSourcePropType => {
+        if (typeof avatar === 'number') return avatar;
+        if (typeof avatar === 'string' && avatar.startsWith('http')) return { uri: avatar };
+        // Add handling for local string paths if necessary, otherwise default
+        return require('../assets/profile-placeholder.png'); // Default placeholder
+    };
+
+    return (
+        <View style={[styles.typingIndicatorContainer, { backgroundColor: colors.background }]}>
+            <Image
+                source={getAvatarSource(character?.avatar)}
+                style={[styles.typingIndicatorAvatar, { borderColor: colors.avatarBorder }]}
+                onError={(e) => console.warn("Typing indicator avatar error:", e.nativeEvent.error)}
+            />
+            <Text style={[styles.typingIndicatorText, { color: colors.subText }]}>
+                {character?.name || 'AI'} is typing{' '}
+            </Text>
+            <TypingIndicator color={colors.typingIndicator} />
+        </View>
+    );
+});
+
+const MessageItem = React.memo(({ item, characterAvatar, colors, isDarkMode, animation }: MessageItemProps) => {
+  const isUser = item.sender === 'user';
+  const formattedTime = useMemo(() => new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), [item.timestamp]);
+
+  // Removed audio playback logic
+  const getAvatarSource = (avatar: Character['avatar']): ImageSourcePropType => {
+      if (typeof avatar === 'number') return avatar;
+      if (typeof avatar === 'string' && avatar.startsWith('http')) return { uri: avatar };
+      // Add handling for local string paths if necessary, otherwise default
+      return require('../assets/profile-placeholder.png'); // Default placeholder
+  };
+
+  const aiAvatarSource = useMemo(() => getAvatarSource(characterAvatar), [characterAvatar]);
+
+
+  return (
+    <Animated.View
+      style={[
+        styles.messageRow,
+        isUser ? styles.userMessageRow : styles.aiMessageRow,
+        {
+          opacity: animation.fadeAnim,
+          transform: [
+            { translateY: animation.slideAnim },
+            { scale: animation.scaleAnim }
+          ]
+        }
+      ]}
+    >
+      {!isUser && (
+        <View style={styles.messageAvatarContainer}>
+          <Image
+            source={aiAvatarSource}
+            style={[styles.messageAvatar, { borderColor: colors.avatarBorder }]}
+            onError={(e) => console.warn("AI avatar error:", e.nativeEvent.error)}
+          />
+        </View>
+      )}
+      <View
+        style={[
+          styles.messageBubble,
+          isUser ? styles.userMessageBubble : styles.aiMessageBubble,
+          isUser
+            ? { backgroundColor: colors.userBubble }
+            : { backgroundColor: colors.aiBubble, borderColor: colors.border, borderWidth: isDarkMode ? 0 : 1 },
+          { shadowColor: colors.aiBubbleShadow }
+        ]}
+      >
+        {/* Removed image and audio display logic */}
+        {/* Always display text content */}
+        <Text style={[styles.messageText, { color: isUser ? colors.userText : colors.aiText }]}>
+          {item.text}
+        </Text>
+        {/* Adjusted timestamp style reference */}
+        <Text style={[styles.messageTimestamp, { color: isUser ? colors.userText : colors.messageTimestamp }]}>
+           {formattedTime}
+         </Text>
+      </View>
+      {isUser && <View style={styles.userAvatarPlaceholder} />}
+    </Animated.View>
+  );
+});
+
+const ChatInput = React.memo(({
+  inputText,
+  setInputText,
+  handleSend,
+  isAISpeaking,
+  colors,
+  sendButtonScale,
+  handlePressInSend,
+  handlePressOutSend,
+  onMicPress, // Destructure the new prop
+  onAttachPress, // Destructure the new prop
+  stagedMedia, // Destructure staged media prop
+  clearStagedMedia // Destructure clear function prop
+}: ChatInputProps) => {
+  const hasStagedMedia = stagedMedia !== null;
+  const canSendText = inputText.trim().length > 0 && !isAISpeaking;
+  const canSend = (canSendText || hasStagedMedia) && !isAISpeaking;
+
+  return (
+    <View style={[styles.inputAreaContainer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+      {/* Staged Media Indicator */}
+      {hasStagedMedia && (
+        <View style={styles.stagedMediaContainer}>
+          <Text style={[styles.stagedMediaText, { color: colors.subText }]}>
+            {stagedMedia.type === 'image' ? 'Image' : 'Audio'} ready
+          </Text>
+          <Pressable onPress={clearStagedMedia} style={styles.clearMediaButton}>
+            <Ionicons name="close-circle" size={18} color={colors.subText} />
+          </Pressable>
+        </View>
+      )}
+
+      {/* Input Row */}
+      <View style={styles.inputRow}>
+      {/* Attachment Button */}
+        <Pressable
+          onPress={onAttachPress}
+          disabled={isAISpeaking || hasStagedMedia} // Disable if AI is speaking or media staged
+          style={({ pressed }: { pressed: boolean }) => [ // Typed 'pressed'
+            styles.inputActionButton, // Generic style for side buttons
+            (isAISpeaking || hasStagedMedia) && styles.sendButtonDisabled, // Reuse disabled style
+            pressed && !(isAISpeaking || hasStagedMedia) && { opacity: 0.7 }
+          ]}
+        >
+          <Ionicons name="attach" size={24} color={colors.subText} />
+        </Pressable>
+
+      <TextInput
+        style={[
+          styles.textInput,
+          {
+            backgroundColor: colors.inputBackground,
+            color: colors.text,
+            borderColor: colors.border,
+          }
+        ]}
+        placeholder="Type a message..."
+        placeholderTextColor={colors.subText}
+        value={inputText}
+        onChangeText={setInputText}
+        multiline
+        editable={!isAISpeaking} // Disable input while AI is speaking
+      />
+
+      {/* Microphone Button */}
+      <Pressable
+        onPress={onMicPress}
+        disabled={isAISpeaking || hasStagedMedia} // Disable if AI is speaking or media staged
+        style={({ pressed }: { pressed: boolean }) => [ // Typed 'pressed'
+          styles.inputActionButton, // Generic style for side buttons
+          (isAISpeaking || hasStagedMedia) && styles.sendButtonDisabled, // Reuse disabled style
+          pressed && !(isAISpeaking || hasStagedMedia) && { opacity: 0.7 }
+        ]}
+      >
+        <Ionicons name="mic" size={24} color={colors.subText} />
+      </Pressable>
+
+      {/* Send Button */}
+      <Pressable
+        onPress={handleSend}
+        disabled={!canSend}
+        onPressIn={handlePressInSend}
+        onPressOut={handlePressOutSend}
+        style={({ pressed }: { pressed: boolean }) => [ // Typed 'pressed'
+          styles.sendButton,
+          { backgroundColor: colors.sendButton },
+          !canSend && styles.sendButtonDisabled,
+          pressed && canSend && { opacity: 0.7 }
+        ]}
+      >
+        <Animated.View style={{ transform: [{ scale: sendButtonScale }] }}>
+          <Ionicons name="send" size={20} color="#FFFFFF" />
+        </Animated.View>
+      </Pressable>
+      </View>
+    </View>
+  );
+});
+
+const ChatHeader = React.memo(({ character, colors, handleBack, handleThemePress }: ChatHeaderProps) => {
+    const getAvatarSource = (avatar: Character['avatar']): ImageSourcePropType => {
+        if (typeof avatar === 'number') return avatar;
+        if (typeof avatar === 'string' && avatar.startsWith('http')) return { uri: avatar };
+        return require('../assets/profile-placeholder.png'); // Default placeholder
+    };
+    const avatarSource = useMemo(() => getAvatarSource(character?.avatar), [character?.avatar]);
+
+    return (
+        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+            <Pressable onPress={handleBack} style={styles.headerButton}>
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <View style={styles.headerCenter}>
+                <Image
+                    source={avatarSource}
+                    style={[styles.headerAvatar, { borderColor: colors.avatarBorder }]}
+                    onError={(e) => console.warn("Header avatar error:", e.nativeEvent.error)}
+                />
+                <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{character?.name || 'Chat'}</Text>
+            </View>
+            <Pressable onPress={handleThemePress} style={styles.headerButton}>
+                <Ionicons name="color-palette-outline" size={24} color={colors.text} />
+            </Pressable>
+        </View>
+    );
+});
+
+const ThemeSelectorModal = React.memo(({ visible, onClose, themes, selectedTheme, onSelectTheme, colors }: ThemeSelectorModalProps) => {
+
+    return (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={visible}
+            onRequestClose={onClose}
+        >
+            <Pressable style={styles.modalOverlay} onPress={onClose}>
+                <Pressable style={[styles.modalContent, { backgroundColor: colors.card }]}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Select Chat Theme</Text>
+                    <FlatList
+                        data={themes}
+                        keyExtractor={(item) => item.id}
+                        numColumns={2} // Display themes in two columns
+                        contentContainerStyle={styles.themeListContainer}
+                        renderItem={({ item }) => (
+                            <Pressable
+                                style={[
+                                    styles.themeItem,
+                                    { borderColor: item.id === selectedTheme.id ? colors.themeSelectedBorder : colors.themePreviewBorder }
+                                ]}
+                                onPress={() => onSelectTheme(item)}
+                            >
+                                <ImageBackground
+                                    source={item.background ?? undefined}
+                                    style={styles.themePreview}
+                                    imageStyle={styles.themePreviewImage}
+                                    resizeMode="cover"
+                                >
+                                    {!item.background && <View style={[styles.defaultThemePreview, { backgroundColor: colors.background }]} />}
+                                </ImageBackground>
+                                <Text style={[styles.themeName, { color: colors.subText }]}>{item.name}</Text>
+                            </Pressable>
+                        )}
+                    />
+                    <Pressable onPress={onClose} style={styles.closeButton}>
+                        <Text style={[styles.closeButtonText, { color: colors.closeButton }]}>Close</Text>
+                    </Pressable>
+                </Pressable>
+            </Pressable>
+        </Modal>
+    );
+});
+
+const GuestModeBanner = React.memo(({ colors, onUpgradePress }: GuestModeBannerProps) => (
+    <View style={[styles.guestBanner, { backgroundColor: colors.accent }]}>
+        <Text style={[styles.guestBannerText, { color: colors.text }]}>Guest Mode: History is local only.</Text>
+        <Pressable onPress={onUpgradePress}>
+            <Text style={[styles.guestBannerLink, { color: colors.primary }]}>Login/Sign Up</Text>
+        </Pressable>
+    </View>
+));
+
+
+// --- Main Component ---
+export default function ChatScreen({ route, navigation }: ChatScreenProps) {
+  const { character } = route.params;
+  const { user } = useAuth(); // Get user context AT TOP LEVEL
+  const { isDarkMode } = useContext(ThemeContext); // Get theme context (Removed unused appTheme)
+  const colors = useDynamicColors(isDarkMode); // Get dynamic colors
+
+  const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start loading initially
+  const [stagedMedia, setStagedMedia] = useState<StagedMedia | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isThemeModalVisible, setIsThemeModalVisible] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState<ChatTheme>(CHAT_THEMES[0]); // Default theme
+
+  const flatListRef = useRef<FlatList>(null);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const messageAnimations = useRef<{ [key: string]: { fadeAnim: Animated.Value; slideAnim: Animated.Value; scaleAnim: Animated.Value } }>({}).current;
+  const sendButtonScale = useRef(new Animated.Value(1)).current;
+
+  // Initial welcome message effect
+  useEffect(() => {
+    if (character && messages.length === 0 && !isLoading) { // Only add if messages are empty and not loading
+      const welcomeText = generateWelcomeMessage(character);
+      const welcomeMessage: UIMessage = {
+        id: 'welcome-' + character.id,
+        text: welcomeText,
+        sender: 'ai',
+        timestamp: Date.now() - 1000, // Slightly before load time
+      };
+      setMessages([welcomeMessage]); // Prepend welcome message
+    }
+  }, [character, messages.length, isLoading]); // Depend on messages.length and isLoading
+
+
+  // Animation handlers
+  const animateButton = (toValue: number) => {
+    Animated.spring(sendButtonScale, {
+      toValue,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  };
+  const handlePressInSend = () => animateButton(0.9);
+  const handlePressOutSend = () => animateButton(1);
+
+  // Get or create animation values for a message
+  const getMessageAnimation = useCallback((messageId: string | number) => {
+    const key = String(messageId);
+    if (!messageAnimations[key]) {
+      messageAnimations[key] = {
+        fadeAnim: new Animated.Value(0),
+        slideAnim: new Animated.Value(10),
+        scaleAnim: new Animated.Value(0.95)
+      };
+      Animated.parallel([
+        Animated.timing(messageAnimations[key].fadeAnim, {
+          toValue: 1,
+          duration: MESSAGE_ANIMATION_DURATION,
+          useNativeDriver: true,
+        }),
+        Animated.timing(messageAnimations[key].slideAnim, {
+          toValue: 0,
+          duration: MESSAGE_ANIMATION_DURATION,
+          useNativeDriver: true,
+        }),
+        Animated.timing(messageAnimations[key].scaleAnim, {
+          toValue: 1,
+          duration: MESSAGE_ANIMATION_DURATION,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    return messageAnimations[key];
+  }, [messageAnimations]); // messageAnimations is stable
+
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback(() => {
+    // Use setTimeout to ensure FlatList has updated
+    setTimeout(() => {
+      flatListRef.current?.scrollToOffset({ animated: true, offset: 0 });
+    }, 100); // Small delay
+  }, []);
+
+
+  // Load initial messages and subscribe to realtime updates
+  useEffect(() => {
+    let channel: RealtimeChannel | null = null;
+    const loadChat = async () => {
+      setIsLoading(true);
       try {
-        if (!user && !isGuest) return;
-
-        setLoading(true);
-
-        if (existingConversationId) {
-          // Load existing conversation
-          const conversation = await getConversation(existingConversationId);
-          if (!conversation) throw new Error('Conversation not found');
-
-          // Load messages
-          const dbMessages = await getConversationMessages(existingConversationId);
-
-          // Convert DB messages to app format
-          const formattedMessages = dbMessages.map(dbMsg => ({
-            id: dbMsg.id,
-            text: dbMsg.content,
-            sender: dbMsg.sender_type === 'user' ? 'user' : 'ai' as 'user' | 'ai',
-            timestamp: new Date(dbMsg.created_at).getTime(),
-          }));
-
-          setMessages(formattedMessages);
-          setConversationId(existingConversationId);
-        } else {
-          // Create a new conversation if user is logged in
-          if (user && !isGuest) {
-            const newConversation = await createConversation(
-              user.id,
-              character.id,
-              {
-                name: character.name,
-                description: character.description,
-                image: character.avatar, // Use avatar
-                category: character.category,
-                tags: character.tags
+        if (user?.id && character?.id) {
+          // Logged-in user: Fetch from DB
+          const dbMessages = await getChatMessages(user.id, character.id);
+          const uiMessages = dbMessages.map(mapDbMessageToUIMessage);
+          setMessages(uiMessages);
+        } else if (character?.id) {
+          console.log('CHAT_SCREEN [Guest Load]: Loading messages for guest.');
+          // Guest user: Load from AsyncStorage
+          const storageKey = `guest_conversation_${character.id}`;
+          console.log(`CHAT_SCREEN [Guest Load]: Using storage key: ${storageKey}`);
+          const storedMessagesRaw = await AsyncStorage.getItem(storageKey);
+          console.log(`CHAT_SCREEN [Guest Load]: Raw data from AsyncStorage:`, storedMessagesRaw);
+          if (storedMessagesRaw) {
+            try {
+              const storedMessages: UIMessage[] = JSON.parse(storedMessagesRaw);
+              // console.log(`CHAT_SCREEN [Guest Load]: Parsed messages from AsyncStorage:`, JSON.stringify(storedMessages, null, 2)); // Keep commented unless needed
+              // Basic validation
+              if (Array.isArray(storedMessages)) {
+                // Ensure messages have necessary fields (simple check)
+                const validMessages = storedMessages.filter(m => m && m.id && m.text && m.sender && m.timestamp);
+                setMessages(validMessages);
+              } else {
+                 console.warn(`CHAT_SCREEN [Guest Load]: Invalid data format in AsyncStorage for key ${storageKey}. Expected array.`);
+                 setMessages([]); // Reset to empty if data is invalid
               }
-            );
-
-            if (newConversation) {
-              setConversationId(newConversation.id);
-
-              // Add welcome message to database
-              const welcomeMessage = generateWelcomeMessage(character);
-              await sendMessageToDb(
-                newConversation.id,
-                'character',
-                welcomeMessage,
-                { characterId: character.id }
-              );
-
-              // Record character interaction
-              await recordCharacterInteraction(user.id, character.id);
-
-              // Set initial message in app state
-              setMessages([{
-                id: uuidv4(),
-                text: welcomeMessage,
-                sender: 'ai',
-                timestamp: Date.now(),
-              }]);
+            } catch (parseError) {
+              console.error(`CHAT_SCREEN [Guest Load]: Error parsing guest messages from AsyncStorage for key ${storageKey}:`, parseError);
+              setMessages([]); // Reset on parse error
             }
           } else {
-            // For guests, just show the welcome message in memory
-            setMessages([{
-              id: uuidv4(),
-              text: generateWelcomeMessage(character),
-              sender: 'ai',
-              timestamp: Date.now(),
-            }]);
+            setMessages([]); // No stored messages, start empty
+          }
+        } else {
+          console.warn("CHAT_SCREEN: Cannot load chat - missing user ID or character ID.");
+          setMessages([]); // Ensure messages are empty if IDs are missing
+        }
+      } catch (error) {
+        console.error("CHAT_SCREEN: Error loading chat messages:", error);
+        Alert.alert("Error", "Could not load chat history.");
+        setMessages([]); // Reset on error
+      } finally {
+        setIsLoading(false);
+      }
+
+      // Subscribe to realtime updates only for logged-in users
+      if (user?.id && character?.id) {
+        channel = subscribeToNewMessages(user.id, character.id, (newMessage) => {
+          console.log('Realtime message received:', newMessage);
+          const uiMessage = mapDbMessageToUIMessage(newMessage);
+          // Use functional update to avoid race conditions and ensure correct order
+          setMessages(prevMessages => {
+            // Check if message already exists (by DB ID if available)
+            if (prevMessages.some(msg => msg.id === uiMessage.id)) {
+              return prevMessages; // Already exists, don't add again
+            }
+            // Assuming inverted list, add new message to the beginning
+            return [uiMessage, ...prevMessages];
+          });
+          scrollToBottom(); // Scroll when new message arrives
+        });
+        console.log('Subscribed to realtime channel:', channel);
+      }
+    };
+
+    if (character?.id) { // Only load if character exists
+        loadChat();
+    } else {
+        console.error("CHAT_SCREEN: Character data is missing, cannot load chat.");
+        setIsLoading(false); // Stop loading if no character
+        setMessages([]);
+    }
+
+    // Cleanup function
+    return () => {
+      if (channel) {
+        console.log('Unsubscribing from channel:', channel);
+        unsubscribeFromChat(channel);
+      }
+    };
+  }, [user?.id, character?.id, scrollToBottom]); // Re-run if user or character changes
+
+  // Load selected theme from AsyncStorage
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedThemeId = await AsyncStorage.getItem(`chat_theme_${character.id}`);
+        if (savedThemeId) {
+          const foundTheme = CHAT_THEMES.find(t => t.id === savedThemeId);
+          if (foundTheme) {
+            setSelectedTheme(foundTheme);
           }
         }
       } catch (error) {
-        console.error('Error loading conversation:', error);
-        Alert.alert('Error', 'Failed to load conversation. Please try again.');
-      } finally {
-        setLoading(false);
-        setInitialLoadComplete(true);
+        console.error("Error loading chat theme:", error);
       }
     };
-
-    loadConversation();
-  }, [user, isGuest, existingConversationId, character]);
-
-  // Typing indicator animation
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
-    if (loading) {
-      intervalId = setInterval(() => {
-        setTypingIndicator((prev) => (prev + 1) % TYPING_INDICATORS.length);
-      }, 500);
+    if (character?.id) {
+        loadTheme();
     }
+  }, [character?.id]);
 
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [loading]);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      const isUser = lastMessage.sender === 'user';
-
-      // Create new animated values for the last message
-      const newFadeAnim = new Animated.Value(0);
-      const newSlideAnim = new Animated.Value(isUser ? 50 : -50);
-
-      messageAnimations.set(lastMessage.id, {
-        fadeAnim: newFadeAnim,
-        slideAnim: newSlideAnim
-      });
-
-      // Start animations
-      Animated.parallel([
-        Animated.timing(newFadeAnim, {
-          toValue: 1,
-          duration: MESSAGE_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-        Animated.timing(newSlideAnim, {
-          toValue: 0,
-          duration: MESSAGE_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-      ]).start();
+  // Handle theme selection and save
+  const handleSelectTheme = useCallback(async (theme: ChatTheme) => {
+    setSelectedTheme(theme);
+    setIsThemeModalVisible(false);
+    try {
+      await AsyncStorage.setItem(`chat_theme_${character.id}`, theme.id);
+    } catch (error) {
+      console.error("Error saving chat theme:", error);
+      Alert.alert("Error", "Could not save theme preference.");
     }
-  }, [messages]);
+  }, [character?.id]);
 
-  const generateWelcomeMessage = (character: Character) => {
-    // Character-specific welcome messages with more personality and playfulness
-    const characterMessages = {
-      '1': [
-        `*lounging on a couch, scrolling through phone* 🙄 Oh great, it's you. Your brother warned me you'd text. What's your deal anyway?`,
-        `*looks up from phone with a smirk* Well well, if it isn't the troublemaker. Your brother's told me ALL about you... 😏`,
-        `*pretending to be busy* Ugh, fine. I guess we can talk. But make it interesting at least!`
-      ],
-      '2': [
-        `*rushes to phone excitedly* 💕 My love! I was just daydreaming about our next adventure together. What mischief shall we get into today?`,
-        `*sends virtual hug* 🤗 There's my favorite person! I've been reorganizing our photos all morning. Remember that time when...`,
-        `*dramatic pose* My heart skips a beat every time you message me! Tell me, what's on your mind, my dear?`
-      ],
-      '3': [
-        `EITA! 🇧🇷✨ Look who finally decided to message the charming Brazilian! Missing our late-night snack runs already? 😉`,
-        `*dancing samba* Oiiii! 💃 Just thinking about all the trouble we could get into... Want to practice some Portuguese? 😏`,
-        `*sends beach selfie* 🏖️ The sun's not as bright here without you! When are you coming to visit? We have so much catching up to do!`
-      ],
-      '4': [
-        `*bouncing off the walls* COUSIN!!! 🎮 I brought my new gaming console and ALL the snacks! Ready for an epic weekend? 🍕`,
-        `*already in pajamas* Sleepover time! I've got face masks, horror movies, and sooo much gossip to share! 🎭`,
-        `*ninja rolls into the room* Guess who's here to turn your boring weekend into an adventure? 🦹‍♂️`
-      ],
-      '5': [
-        `Fala mlk! 🎵 Just dropped a new track in the studio. Want a private listening session? 🎧`,
-        `E aí! 🏀 The crew's heading to the court later. You in? Promise I won't show you up too bad this time! 😎`,
-        `*freestyle rapping* Yo, check it! Got the whole squad asking about you. What's good? 🎤`
-      ],
-      '6': [
-        `*adjusts designer watch* 💼 I suppose our families' merger makes us... inevitable. Though I must admit, your Instagram presence is... intriguing.`,
-        `*sips expensive tea* 🫖 Well, since we're stuck in this arrangement, we might as well make it interesting. Tell me, what makes you different from the others?`,
-        `*checking portfolio* 📈 Our parents' plan is quite... strategic. But I'm more interested in your thoughts on the matter. Dinner at 8?`
-      ],
-      '7': [
-        `*revs motorcycle engine* 🏍️ Caught you staring at my bike earlier. Want to know what freedom feels like? 😏`,
-        `*polishing chrome* 🔧 Most people are too scared to message me. You've got guts, I'll give you that. What's your story?`,
-        `*leather jacket rustling* 🌙 Night ride under the stars? I know all the best roads... if you're brave enough.`
-      ],
-      '8': [
-        `*already doing push-ups* 💪 Ready to crush your fitness goals? First one to 100 reps wins! GO! 🏃‍♀️`,
-        `*mixing protein shake* 🥤 Your brother says you're ready to level up your fitness game. I like a challenge! Let's get you PUMPED!`,
-        `*stretching* 🧘‍♀️ Okay superstar, show me what you've got! Today's gonna be EPIC! 🌟`
-      ],
-      '9': [
-        `*adjusting glasses with intrigue* 📚 A student messaging after hours? Either you're exceptionally dedicated or... something else entirely.`,
-        `*marking papers* 📝 How curious... Most students avoid direct contact. You must be either very brave or very desperate.`,
-        `*closing laptop slowly* 🤔 Well, this is... unexpected. Do enlighten me on what academic emergency brings you here.`
-      ],
-      '10': [
-        `Aloha! 🏄‍♂️ Waves are perfect, sky's clear, and I've got an extra board with your name on it! Ready to catch some magic?`,
-        `*sand in hair* 🌺 Just finished teaching a class, but I saved the best spots for you! Ever surfed under a rainbow?`,
-        `*waxing surfboard* 🌊 Perfect timing! The ocean's calling our names. What do you say we make some waves? 🏖️`
-      ]
-    };
+  const handleThemePress = () => setIsThemeModalVisible(true);
 
-    // More engaging default messages
-    const defaultMessages = [
-      `*eyes lighting up* Hey there! I'm ${character.name} and I've got a feeling we're going to have some amazing conversations! ${character.description} 🌟`,
-      `*doing a little dance* Hi! ${character.name} here, ready to make your day more interesting! What's on your mind? ✨`,
-      `*strikes a pose* Ta-da! I'm ${character.name}, and I've been waiting for someone like you to chat with! Let's make this fun! 🎭`,
-      `*appears in a puff of glitter* Greetings! I'm ${character.name}, your new favorite conversation partner! Ready for an adventure? 🚀`
-    ];
+  // --- Media Handling ---
 
-    // Get character-specific messages or use defaults
-    const charMessages = characterMessages[character.id as keyof typeof characterMessages] || defaultMessages;
+  const clearStagedMedia = () => setStagedMedia(null);
 
-    // Return a random message from the available options
-    return charMessages[Math.floor(Math.random() * charMessages.length)];
-  };
-
-  const handleSend = async () => {
-    if (!inputText.trim()) return;
-
-    const userMessage = inputText.trim();
-    setInputText('');
-
-    // Create a user message object
-    const newUserMessage: Message = {
-      id: uuidv4(),
-      text: userMessage,
-      sender: 'user',
-      timestamp: Date.now(),
-    };
-
-    // Add user message to UI
-    setMessages(prev => [...prev, newUserMessage]);
-
-    // Increment guest message count if in guest mode
-    if (isGuest) {
-      await incrementGuestMessageCount();
-
-      // Check if we should show subscription offer
-      const shouldShowOffer = await shouldShowSubscriptionOffer();
-      if (shouldShowOffer) {
-        setShowCloseButton(false);
-        setTimeout(() => {
-          setShowCloseButton(true);
-        }, 15000); // Show close button after 15 seconds
-        // Navigate to DiscountOfferScreen instead, passing the state
-        navigation.navigate('DiscountOfferScreen', { fromCharacter: true });
-        return;
-      }
+  // Request permissions and pick image/video
+  const handlePickMedia = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to make this work!');
+      return;
     }
-
-    // Save message to database if user is logged in
-    if (user && !isGuest && conversationId) {
-      try {
-        await sendMessageToDb(
-          conversationId,
-          'user',
-          userMessage
-        );
-      } catch (error) {
-        console.error('Error saving user message:', error);
-      }
-    }
-
-    // Show typing indicator
-    setLoading(true);
-    const typingInterval = setInterval(() => {
-      setTypingIndicator(prev => (prev + 1) % TYPING_INDICATORS.length);
-    }, 500);
 
     try {
-      // Get AI response
-      const aiResponse = await fetchAIResponse(userMessage, messages, character);
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images, // Allow only images for now
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7, // Reduce quality slightly for faster uploads
+        base64: true, // Request base64 encoding
+      });
 
-      // Create an AI message object
-      const newAIMessage: Message = {
-        id: uuidv4(),
-        text: aiResponse,
-        sender: 'ai',
-        timestamp: Date.now(),
-      };
-
-      // Add AI message to UI
-      setMessages(prev => [...prev, newAIMessage]);
-
-      // Save AI message to database if user is logged in
-      if (user && !isGuest && conversationId) {
-        try {
-          await sendMessageToDb(
-            conversationId,
-            'character',
-            aiResponse,
-            { characterId: character.id }
-          );
-        } catch (error) {
-          console.error('Error saving AI message:', error);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        if (asset.base64 && asset.uri) {
+          setStagedMedia({
+            uri: asset.uri,
+            base64: asset.base64,
+            type: 'image', // Hardcoded as image for now
+            mimeType: asset.mimeType ?? 'image/jpeg', // Get mimeType if available
+          });
+          setInputText(''); // Clear text input when media is staged
+        } else {
+          console.warn("ImagePicker result missing base64 or uri:", asset);
+          Alert.alert("Error", "Could not process the selected image.");
         }
       }
     } catch (error) {
-      console.error('Error fetching AI response:', error);
-      Alert.alert('Error', 'Failed to get a response. Please try again.');
-    } finally {
-      clearInterval(typingInterval);
-      setLoading(false);
+        console.error("Error picking media:", error);
+        Alert.alert("Error", "An error occurred while selecting media.");
     }
-  };
+  }, []);
 
-  const fetchAIResponse = async (
-    userInput: string,
-    chatHistory: Message[],
-    character: Character
-  ): Promise<string> => {
-    // Format character context based on the character
-    const characterContext = `You are ${character.name}. ${character.description}. You embody the following traits: ${(character.tags || []).join( // Handle potentially undefined tags
-      ', '
-    )}. Respond in character to the user's messages. Keep your responses conversational, engaging, and consistent with your character.`;
 
-    // Format the conversation history for the API
-    const conversationHistory = chatHistory.map((msg) => ({
-      role: msg.sender === 'user' ? 'user' : 'assistant',
-      content: msg.text,
-    }));
+  // --- Audio Recording ---
 
-    // Add system message with character context
-    const apiMessages = [
-      {
-        role: 'system',
-        content: characterContext,
-      },
-      ...conversationHistory,
-      { role: 'user', content: userInput },
-    ];
-
+  const startRecording = useCallback(async () => {
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer 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',
-          'HTTP-Referer': 'https://fantasyai.app', // Replace with your actual domain if needed
-          'X-Title': 'Fantasy AI Chat'
-        },
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-coder', // DeepSeek R1 model
-          messages: apiMessages,
-          temperature: 0.7,
-          max_tokens: 1024,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('OpenRouter API error:', errorData);
-        throw new Error(`API error: ${response.status}`);
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Microphone permission is needed for audio recording.');
+        return;
       }
 
-      const data = await response.json();
-      return data.choices[0].message.content.trim();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      console.log('Starting recording..');
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+         Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecording(newRecording);
+      setRecordingDuration(0); // Reset duration
+      console.log('Recording started');
+
+      // Start timer to update duration
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error('Failed to start recording', err);
+      Alert.alert("Recording Error", "Could not start audio recording.");
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    console.log('Stopping recording..');
+    if (!recording) return;
+
+    // Clear timer
+    if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+    }
+
+    try {
+        await recording.stopAndUnloadAsync();
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false }); // Reset audio mode
+        const uri = recording.getURI();
+        console.log('Recording stopped and stored at', uri);
+
+        if (uri) {
+            // Read the file and convert to base64
+            const base64 = await FileSystem.readAsStringAsync(uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            setStagedMedia({
+                uri: uri,
+                base64: base64,
+                type: 'audio',
+                mimeType: 'audio/mp4', // Adjust if using a different format
+            });
+            setInputText(''); // Clear text input
+        }
     } catch (error) {
-      console.error('Error calling OpenRouter API:', error);
-
-      // Fallback to predefined responses if API call fails
-      const defaultResponses = [
-        "Hey there! What's up?",
-        "That's really interesting! I'd love to hear more.",
-        "I was just thinking about that the other day.",
-        "I'm not sure I understand. Could you explain that differently?",
-        "Let me think about that for a moment...",
-        "I appreciate you sharing that with me.",
-      ];
-
-      // Return a fallback response
-      return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+        console.error('Failed to stop recording or process audio', error);
+        Alert.alert("Recording Error", "Could not stop or process the audio recording.");
+    } finally {
+        setRecording(null); // Clear recording object
+        setRecordingDuration(0); // Reset duration display
     }
-  };
+  }, [recording]);
 
-  // Function to render a message with animation
-  const renderMessage = useCallback(({ item }: { item: Message }) => {
-    const isUser = item.sender === 'user';
-
-    // Initialize animation values if they don't exist for this message
-    if (!messageAnimations.has(item.id)) {
-      const fadeAnim = new Animated.Value(0);
-      const slideAnim = new Animated.Value(isUser ? 50 : -50); // Adjust initial slide based on sender
-      messageAnimations.set(item.id, { fadeAnim, slideAnim });
-
-      // Start animation
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: MESSAGE_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: MESSAGE_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-      ]).start();
+  const handleMicPress = useCallback(() => {
+    if (recording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
+  }, [recording, startRecording, stopRecording]);
 
-    // Get animation values
-    const messageAnimation = messageAnimations.get(item.id) || { fadeAnim: new Animated.Value(1), slideAnim: new Animated.Value(0) };
-
-    // Format timestamp for display
-    const messageDate = new Date(item.timestamp);
-    const formattedTime = messageDate.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    return (
-      <Animated.View
-        key={item.id}
-        style={[
-          styles.messageRow, // Use messageRow for overall layout
-          isUser ? styles.userMessageRow : styles.aiMessageRow,
-          {
-            opacity: messageAnimation.fadeAnim,
-            transform: [{ translateY: messageAnimation.slideAnim }],
-          },
-        ]}
-      >
-        {!isUser && (
-          <Image
-            source={typeof character.avatar === 'number' ? character.avatar : { uri: character.avatar }}
-            style={[styles.messageAvatar, { borderColor: colors.avatarBorder }]} // Apply conditional border here
-          />
-        )}
-
-        <View
-          style={[
-            styles.messageBubble,
-            isUser ? styles.userMessageBubble : styles.aiMessageBubble,
-            isUser ? { backgroundColor: colors.userBubble } : { backgroundColor: colors.aiBubble, borderColor: colors.border, borderWidth: isDarkMode ? 0 : 1 },
-          ]}
-        >
-          <Text
-            style={[
-              styles.messageText,
-              { color: isUser ? colors.userText : colors.aiText }
-            ]}
-          >
-            {item.text}
-          </Text>
-
-          <Text
-            style={[
-              styles.messageTime,
-              { color: isUser ? 'rgba(255, 255, 255, 0.7)' : colors.subText }
-            ]}
-          >
-            {formattedTime}
-          </Text>
-        </View>
-
-        {isUser && (
-          <View style={styles.userAvatarPlaceholder} /> // Keep placeholder for alignment
-        )}
-      </Animated.View>
+  const handleAttachPress = useCallback(() => {
+    // Simple alert to choose media type for now
+    Alert.alert(
+      "Attach Media",
+      "Choose media type to attach:",
+      [
+        { text: "Image", onPress: handlePickMedia },
+        // { text: "Audio", onPress: () => console.log("Audio attach TBD") }, // Placeholder
+        { text: "Cancel", style: "cancel" }
+      ]
     );
-  }, [isDarkMode, character, messageAnimations, colors]); // Include colors in dependency array
+  }, [handlePickMedia]);
 
-  const handleBack = () => {
-    // Navigate back to the main tabs screen which contains the home tab
-    navigation.navigate('MainTabs');
-  };
 
-  const renderThemeSelector = () => (
-    <Modal
-      visible={showThemeSelector}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowThemeSelector(false)}
-    >
-      <View style={[styles.themeModalContainer, { backgroundColor: colors.card }]}>
-        <View style={styles.themeModalHeader}>
-          <Text style={[styles.themeModalTitle, { color: colors.text }]}>Chat Background</Text>
-          <TouchableOpacity onPress={() => setShowThemeSelector(false)}>
-            <Ionicons name="close" size={24} color={colors.text} />
-          </TouchableOpacity>
+  // --- Send Message Logic ---
+  const handleSendMessage = useCallback(async () => {
+    // Use the 'user' from the component scope, not from calling useAuth() again
+    const isGuest = !user?.id;
+    console.log(`CHAT_SCREEN [handleSendMessage]: Function called! isGuest: ${isGuest}`);
+
+    const textToSend = inputText.trim();
+    const mediaToSend = stagedMedia; // Capture staged media
+    console.log(`CHAT_SCREEN [handleSendMessage]: textToSend = "${textToSend}"`); // Keep this log
+    console.log(`CHAT_SCREEN [handleSendMessage]: mediaToSend =`, mediaToSend); // Keep this log
+
+    // Reset input and staged media immediately
+    setInputText('');
+    setStagedMedia(null);
+    Keyboard.dismiss(); // Dismiss keyboard on send
+
+    if (!textToSend && !mediaToSend) {
+      console.log("CHAT_SCREEN [handleSendMessage]: Attempted to send empty message. Exiting.");
+      return; // Don't send empty messages
+    }
+
+    // --- Create User Message for UI ---
+    const userMessage: UIMessage = {
+      id: uuidv4(), // Generate unique ID for UI message
+      text: textToSend,
+      sender: 'user',
+      timestamp: Date.now(),
+      image_url: mediaToSend?.type === 'image' ? mediaToSend.uri : undefined,
+      audio_url: mediaToSend?.type === 'audio' ? mediaToSend.uri : undefined,
+    };
+    console.log(`CHAT_SCREEN [handleSendMessage]: Created user message for UI:`, userMessage);
+
+    // Add user message to UI immediately
+    // Use functional update and add to the beginning (since list is inverted)
+    setMessages(prev => {
+        console.log(`CHAT_SCREEN [handleSendMessage setMessages User]: Adding user message to state. Prev count: ${prev.length}`);
+        const newMessages = [userMessage, ...prev];
+        console.log(`CHAT_SCREEN [handleSendMessage setMessages User]: New count: ${newMessages.length}`);
+        return newMessages;
+    });
+    scrollToBottom(); // Scroll after adding user message
+
+    // --- Prepare data for AI/DB ---
+    setIsAISpeaking(true); // Indicate AI is processing
+
+    // FIX: Construct history based on the state *after* adding the user message
+    const messagesIncludingNewUser = [userMessage, ...messages]; // Manually create the array as it should be after the state update
+    const historyForAI = messagesIncludingNewUser
+      .slice(1, 11) // Slice from index 1 to exclude the current message, take up to 10 previous
+      .filter(msg => msg.text)
+      .map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text,
+      }))
+      .reverse(); // Reverse to get chronological order
+
+    console.log(`CHAT_SCREEN [handleSendMessage]: History for AI (excluding current):`, JSON.stringify(historyForAI, null, 2));
+
+
+    // Construct the current user message content for the AI
+    let currentUserContent: OpenRouterMessageContent = [];
+    if (textToSend) {
+      currentUserContent.push({ type: 'text', text: textToSend });
+    }
+    if (mediaToSend?.type === 'image' && mediaToSend.base64) {
+      currentUserContent.push({
+        type: 'image_url',
+        image_url: { url: `data:${mediaToSend.mimeType ?? 'image/jpeg'};base64,${mediaToSend.base64}` }
+      });
+    }
+    // Note: Sending audio base64 directly might not be supported by all models.
+    // This might need adjustment based on the specific AI model's capabilities.
+    // if (mediaToSend?.type === 'audio' && mediaToSend.base64) {
+    //   // How to represent audio depends on the model. Placeholder:
+    //   currentUserContent.push({ type: 'text', text: `[User sent audio: ${mediaToSend.mimeType ?? 'audio/mp4'}]` });
+    // }
+
+    // If only text was sent, simplify content structure
+    if (currentUserContent.length === 1 && currentUserContent[0].type === 'text') {
+      currentUserContent = currentUserContent[0].text;
+    } else if (currentUserContent.length === 0) {
+        console.warn("handleSendMessage: No content to send to AI.");
+        setIsAISpeaking(false);
+        return; // Should not happen if check at start works, but safeguard
+    }
+
+    const messagesForFunction = [
+        ...historyForAI,
+        { role: 'user', content: currentUserContent } // Add the current message separately
+    ];
+    console.log(`CHAT_SCREEN [handleSendMessage]: Complete messagesForFunction:`, JSON.stringify(messagesForFunction, null, 2)); // Log the final payload
+
+
+    try {
+      if (user?.id && character?.id) {
+        // --- Logged-in User Logic ---
+        console.log(`CHAT_SCREEN [handleSendMessage LoggedIn]: Sending message to DB...`);
+        // Send message to DB (which triggers Edge Function via hook/trigger)
+        // Corrected arguments for sendMessageToDb: userId, characterId, content, sender, imageUrl, audioUrl
+        await sendMessageToDb(user.id, character.id, textToSend, 'user', mediaToSend?.type === 'image' ? mediaToSend.uri : undefined, mediaToSend?.type === 'audio' ? mediaToSend.uri : undefined);
+        console.log(`CHAT_SCREEN [handleSendMessage LoggedIn]: Message sent to DB. Waiting for realtime response.`);
+        // Realtime subscription will handle adding the AI message to the UI
+        setIsAISpeaking(false); // Let realtime handle AI message display
+      } else if (character?.id) {
+        // --- Guest User Logic ---
+        console.log(`CHAT_SCREEN [handleSendMessage Guest]: Calling Edge Function 'openrouter-proxy'...`);
+        // Call the Edge Function directly
+        const { data, error } = await supabase.functions.invoke('openrouter-proxy', {
+          body: JSON.stringify({
+            model: "openai/gpt-4o-mini", // Or fetch dynamically
+            messages: messagesForFunction, // Use the corrected history + current message
+            characterId: character.id, // Pass character ID for context/logging
+            // No userId for guests
+          }),
+        });
+        console.log(`CHAT_SCREEN [handleSendMessage Guest]: Edge Function response - data:`, JSON.stringify(data, null, 2));
+        console.log(`CHAT_SCREEN [handleSendMessage Guest]: Edge Function response - error:`, error);
+
+        setIsAISpeaking(false); // AI finished
+
+        if (error) {
+          console.error("CHAT_SCREEN [Guest Send Error]: Edge function error:", error);
+          Alert.alert("AI Error", `Could not get response: ${error.message}`);
+          // Optionally add an error message to the chat UI
+          setMessages(prev => [{ id: uuidv4(), text: `Error: ${error.message}`, sender: 'ai', timestamp: Date.now() }, ...prev]);
+          return;
+        }
+
+        if (!data?.message) {
+            console.error("CHAT_SCREEN [Guest Send Error]: No message content in Edge function response:", data);
+            Alert.alert("AI Error", "Received an empty response from the AI.");
+            setMessages(prev => [{ id: uuidv4(), text: "[AI response was empty]", sender: 'ai', timestamp: Date.now() }, ...prev]);
+            return;
+        }
+
+        // --- Guest User Specific Logic ---
+        // Use the component-scoped 'user' here too
+        if (!user?.id && data?.message) { // Check for guest and message existence
+          console.log(`CHAT_SCREEN [handleSendMessage Guest]: AI response received: "${data.message}"`);
+          const newAiMessageForUI: UIMessage = {
+            id: Crypto.randomUUID(),
+            text: data.message, // Use the message from the response
+            sender: 'ai',
+            timestamp: Date.now(),
+          };
+          console.log(`CHAT_SCREEN [handleSendMessage Guest]: Created new AI message for UI:`, JSON.stringify(newAiMessageForUI, null, 2));
+          setMessages(previousMessages => {
+              console.log(`CHAT_SCREEN [handleSendMessage Guest setMessages]: Previous messages count: ${previousMessages.length}`);
+              // Ensure we don't add duplicates if the message somehow got added already
+              if (previousMessages.some(msg => msg.id === newAiMessageForUI.id)) {
+                  console.log(`CHAT_SCREEN [handleSendMessage Guest setMessages]: Duplicate AI message detected (ID: ${newAiMessageForUI.id}), not adding.`);
+                  return previousMessages;
+              }
+              // IMPORTANT: Assuming FlatList inverted={true}, new messages should be added to the START
+              const newMessages = [newAiMessageForUI, ...previousMessages];
+              console.log(`CHAT_SCREEN [handleSendMessage Guest setMessages]: New messages count: ${newMessages.length}`);
+              return newMessages;
+          });
+          // Save updated messages to AsyncStorage *after* state update (using a separate useEffect might be safer)
+          try {
+            const storageKey = `guest_conversation_${character.id}`;
+            console.log(`CHAT_SCREEN [handleSendMessage Guest Save]: Attempting to save to AsyncStorage. Key: ${storageKey}`);
+            // Get the latest state by using the functional update pattern's result conceptually
+            let finalMessagesToSave: UIMessage[] = [];
+            setMessages(currentMessages => {
+                finalMessagesToSave = currentMessages; // Capture the *actual* latest state
+                return currentMessages; // No change needed here, just capturing
+            });
+            // Now use finalMessagesToSave which should be the most up-to-date
+            const messagesToSaveString = JSON.stringify(finalMessagesToSave);
+            console.log(`CHAT_SCREEN [handleSendMessage Guest Save]: Stringified messages being saved (length: ${messagesToSaveString.length}):`, messagesToSaveString.substring(0, 500) + '...');
+            await AsyncStorage.setItem(storageKey, messagesToSaveString);
+            console.log(`CHAT_SCREEN [handleSendMessage Guest Save]: Successfully saved to AsyncStorage.`);
+          } catch (saveError) {
+            console.error("CHAT_SCREEN [handleSendMessage Guest Save Error]: Failed to save guest messages:", saveError);
+            Alert.alert("Save Error", "Could not save the conversation history.");
+          }
+          scrollToBottom(); // Scroll after adding AI message
+        }
+      } else {
+        console.error("CHAT_SCREEN: Cannot send message - missing character ID.");
+        Alert.alert("Error", "Character information is missing.");
+        setIsAISpeaking(false);
+      }
+    } catch (error) {
+      console.error("CHAT_SCREEN: Error sending message:", error);
+      Alert.alert("Error", `An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsAISpeaking(false);
+      // Optionally add an error message to the chat UI
+      setMessages(prev => [{ id: uuidv4(), text: `Error sending: ${error instanceof Error ? error.message : 'Unknown error'}`, sender: 'ai', timestamp: Date.now() }, ...prev]);
+    }
+  }, [messages, user?.id, character?.id, isAISpeaking, stagedMedia, scrollToBottom, inputText]); // Keep inputText dependency
+
+
+  // Render message item
+  const renderItem = useCallback(({ item }: { item: UIMessage }) => (
+    <MessageItem
+      item={item}
+      characterAvatar={character.avatar}
+      colors={colors}
+      isDarkMode={isDarkMode}
+      animation={getMessageAnimation(item.id)}
+    />
+  ), [character?.avatar, colors, isDarkMode, getMessageAnimation]); // Dependencies for renderItem
+
+
+  // Determine background source based on theme
+  const backgroundSource = useMemo(() => {
+    if (selectedTheme.background) {
+      return selectedTheme.background;
+    }
+    // Return null or a default background if needed when no theme background is set
+    return undefined; // Let ImageBackground handle undefined source potentially
+  }, [selectedTheme]);
+
+  // Debug log for messages state changes
+  useEffect(() => {
+    console.log('CHAT_SCREEN [State Update]: messages state changed:', {
+      count: messages.length,
+      isLoading,
+      isGuest: !user?.id,
+      firstMsgText: messages[0]?.text.substring(0, 20) + '...', // Log first message snippet
+      lastMsgText: messages[messages.length - 1]?.text.substring(0, 20) + '...' // Log last message snippet
+    });
+  }, [messages, isLoading, user]); // Dependencies array
+
+  // Moved isLoading check here to ensure hooks are called consistently
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.card }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-        <FlatList
-          data={CHAT_THEMES}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.themeItemContainer,
-                selectedTheme.id === item.id && styles.themeItemSelected,
-                { borderColor: selectedTheme.id === item.id ? colors.primary : colors.border } // Highlight selected
-              ]}
-              onPress={() => {
-                setSelectedTheme(item);
-                setShowThemeSelector(false);
-              }}
-            >
-              {item.background ? (
-                <Image source={item.background} style={styles.themePreviewImage} />
-              ) : (
-                <View style={[styles.themePreviewImage, { backgroundColor: colors.background }]} />
-              )}
-              <Text style={[styles.themeNameText, { color: colors.text }]}>{item.name}</Text>
-            </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.themeListContainer}
-        />
-      </View>
-    </Modal>
-  );
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.container}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.card }]}>
+      <ImageBackground
+        source={backgroundSource}
+        style={styles.backgroundImage}
+        resizeMode="cover"
       >
-        <View style={[styles.headerContainer, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
-            <Ionicons name="chevron-back" size={28} color={colors.text} />
-          </TouchableOpacity>
-          <View style={styles.headerCenterContent}>
-            <Image
-              source={typeof character.avatar === 'number' ? character.avatar : { uri: character.avatar }}
-              style={[styles.headerAvatar, { borderColor: colors.avatarBorder }]} // Use conditional border
-            />
-            <Text style={[styles.headerTitle, { color: colors.text }]}>{character.name}</Text>
-          </View>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setShowThemeSelector(true)}>
-            <Ionicons name="color-palette-outline" size={26} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-        <ImageBackground
-          source={selectedTheme.background}
-          style={styles.chatAreaContainer}
-          imageStyle={styles.chatBackgroundImage}
+        <ChatHeader
+          character={character}
+          colors={colors}
+          handleBack={() => navigation.goBack()}
+          handleThemePress={handleThemePress}
+        />
+        {!user?.id && <GuestModeBanner colors={colors} onUpgradePress={() => navigation.navigate('Login')} />}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flexOne}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0} // Adjust offset as needed
         >
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.messageListContent}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            showsVerticalScrollIndicator={false}
-          />
-        </ImageBackground>
-
-        {loading && (
-          <View style={[styles.typingIndicatorContainer, { backgroundColor: colors.background }]}>
-            <Image source={character.avatar} style={[styles.typingIndicatorAvatar, { borderColor: colors.avatarBorder }]} />
-            <Text style={[styles.typingIndicatorText, { color: colors.subText }]}>
-              {character.name} {TYPING_INDICATORS[typingIndicator]}
-            </Text>
+          <View style={styles.container}>
+            <FlatList
+              ref={flatListRef}
+              // Log the data prop being passed to FlatList (only when it changes significantly)
+              data={messages} // Log messages state directly if needed: console.log('[FlatList Data] Passing messages to FlatList:', messages);
+              renderItem={renderItem}
+              onLayout={() => console.log(`CHAT_SCREEN [FlatList]: Rendering with messages count: ${messages.length}`)} // Simplified log
+              keyExtractor={(item) => String(item.id)}
+              style={styles.messageList}
+              contentContainerStyle={styles.messageListContent}
+              inverted // Display messages from bottom to top
+              keyboardShouldPersistTaps="handled"
+              {...FLATLIST_OPTIMIZATION_PROPS} // Apply optimizations
+              ListFooterComponent={isAISpeaking ? <TypingIndicatorDisplay character={character} colors={colors} /> : null}
+            />
+            <ChatInput
+              inputText={inputText}
+              setInputText={setInputText}
+              handleSend={handleSendMessage}
+              isAISpeaking={isAISpeaking}
+              colors={colors}
+              sendButtonScale={sendButtonScale}
+              handlePressInSend={handlePressInSend}
+              handlePressOutSend={handlePressOutSend}
+              onMicPress={handleMicPress}
+              onAttachPress={handleAttachPress}
+              stagedMedia={stagedMedia}
+              clearStagedMedia={clearStagedMedia}
+            />
+            {/* Display recording duration */}
+            {recording && (
+                <View style={styles.recordingIndicator}>
+                    <Text style={styles.recordingText}>Recording: {recordingDuration}s</Text>
+                </View>
+            )}
           </View>
-        )}
-
-        <View style={[styles.inputAreaContainer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-          <TextInput
-            style={[styles.textInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
-            placeholder="Type a message..."
-            placeholderTextColor={colors.subText}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButtonContainer,
-              { backgroundColor: colors.sendButton },
-              !inputText.trim() && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim()}
-          >
-            <Ionicons name="send" size={24} color={inputText.trim() ? '#FFFFFF' : colors.subText} />
-          </TouchableOpacity>
-        </View>
-
-        {isGuest && (
-          <View style={[styles.guestModeBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.guestModeText, { color: colors.text }]}>
-              You're using a guest account with limited messages.{' '}
-              <Text
-                style={[styles.guestModeUpgradeLink, { color: colors.primary }]}
-                onPress={() => navigation.navigate('SubscriptionScreen', { isSpecialOffer: false })}
-              >
-                Upgrade now
-              </Text>
-            </Text>
-          </View>
-        )}
-        {renderThemeSelector()}
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </ImageBackground>
+      <ThemeSelectorModal
+        visible={isThemeModalVisible}
+        onClose={() => setIsThemeModalVisible(false)}
+        themes={CHAT_THEMES}
+        selectedTheme={selectedTheme}
+        onSelectTheme={handleSelectTheme}
+        colors={colors}
+      />
     </SafeAreaView>
   );
 }
 
 // --- Styles ---
 const styles = StyleSheet.create({
-  // --- Layout ---
+  safeArea: {
+    flex: 1,
+  },
+  backgroundImage: {
+    flex: 1,
+  },
   container: {
     flex: 1,
+    // backgroundColor: 'transparent', // Ensure container is transparent for background
   },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between', // Distribute space
-    paddingHorizontal: 10, // Reduced horizontal padding
-    paddingVertical: 10, // Reduced vertical padding
-    borderBottomWidth: 1,
-    height: 60, // Fixed height for consistency
-  },
-  headerButton: {
-    padding: 8, // Consistent padding for buttons
-    minWidth: 40, // Ensure buttons have minimum tap area
-    alignItems: 'center', // Center icon
-  },
-  headerCenterContent: {
-    flex: 1, // Allow center content to take available space
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Center items horizontally
-    marginHorizontal: 5, // Add some margin around center content
-  },
-  headerAvatar: {
-    width: 36, // Slightly smaller avatar
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10, // Adjusted margin
-    borderWidth: 1, // Keep border thin
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  chatAreaContainer: {
+  flexOne: {
     flex: 1,
   },
-  chatBackgroundImage: {
-    // Styles for the background image itself if needed (e.g., resizeMode)
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    // backgroundColor set dynamically
+    // borderBottomColor set dynamically
+  },
+  headerButton: {
+    padding: 5, // Add padding for easier tapping
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', // Center avatar and title
+    marginHorizontal: 10, // Add some space around the center content
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    borderWidth: 1, // Add border for visibility
+    // borderColor set dynamically
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    // color set dynamically
+    maxWidth: '80%', // Prevent title from overlapping buttons
+  },
+  guestBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // backgroundColor set dynamically
+  },
+  guestBannerText: {
+    fontSize: 13,
+    marginRight: 8,
+    // color set dynamically
+  },
+  guestBannerLink: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    // color set dynamically (primary)
+  },
+  messageList: {
+    flex: 1,
+    paddingHorizontal: 10,
+    // backgroundColor: 'transparent', // Ensure list is transparent
   },
   messageListContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    flexGrow: 1, // Ensure it grows to fill space
+    paddingVertical: 10, // Add padding to top and bottom of content
   },
-
-  // --- Messages ---
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 16, // Increased spacing between messages
-    alignItems: 'flex-end',
+    marginBottom: 12,
+    alignItems: 'flex-end', // Align items to the bottom
   },
   userMessageRow: {
     justifyContent: 'flex-end',
@@ -787,153 +1344,229 @@ const styles = StyleSheet.create({
   aiMessageRow: {
     justifyContent: 'flex-start',
   },
-  messageAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1, // Thin border
+  messageAvatarContainer: {
+    width: 40, // Fixed width for avatar container
+    marginRight: 8,
+    alignSelf: 'flex-start', // Align avatar to the top of the row
+    paddingTop: 5, // Add padding to align with bubble text slightly better
   },
-  userAvatarPlaceholder: { // Used for alignment on user side
-    width: 36,
-    marginRight: 8, // Match avatar margin
+  messageAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    // borderColor set dynamically
+  },
+  userAvatarPlaceholder: {
+    width: 40, // Match AI avatar container width
+    marginLeft: 8,
   },
   messageBubble: {
-    maxWidth: '75%', // Max width for bubble
-    paddingHorizontal: 14,
+    maxWidth: '75%', // Limit bubble width
     paddingVertical: 10,
-    borderRadius: 18, // Rounded corners
-    marginHorizontal: 8,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    elevation: 1, // Android shadow
+    shadowOffset: { width: 0, height: 1 }, // iOS shadow
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    // backgroundColor set dynamically
+    // shadowColor set dynamically
   },
   userMessageBubble: {
-    borderTopRightRadius: 4, // Characteristic shape
+    borderBottomRightRadius: 4, // Slightly flatten user bubble corner
+    // backgroundColor set dynamically
   },
   aiMessageBubble: {
-    borderTopLeftRadius: 4, // Characteristic shape
+    borderBottomLeftRadius: 4, // Slightly flatten AI bubble corner
+    // backgroundColor set dynamically
+    // borderWidth, borderColor set dynamically for light mode
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 20,
+    // color set dynamically
   },
-  messageTime: {
-    fontSize: 11,
+  messageTimestamp: {
+    fontSize: 10,
+    // color set dynamically
+    alignSelf: 'flex-end', // Position timestamp to the right
     marginTop: 4,
-    alignSelf: 'flex-end',
-    opacity: 0.7, // Make time less prominent
+    opacity: 0.7,
   },
-
-  // --- Typing Indicator ---
-  typingIndicatorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  typingIndicatorAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-    borderWidth: 1,
-  },
-  typingIndicatorText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-
-  // --- Input Area ---
   inputAreaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
     borderTopWidth: 1,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10, // More padding for iOS home indicator area
+    paddingTop: 10,
+    paddingHorizontal: 10,
+    // backgroundColor, borderTopColor set dynamically
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center', // Align items vertically
   },
   textInput: {
     flex: 1,
-    borderRadius: 24, // Fully rounded input
-    paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8, // Adjust padding per platform
-    marginRight: 8,
-    fontSize: 16,
-    maxHeight: 120, // Limit height for multiline
+    minHeight: 40, // Minimum height
+    maxHeight: 120, // Maximum height before scrolling
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 10, // Adjust vertical padding
+    fontSize: 15,
+    marginHorizontal: 8, // Space between buttons and input
+    // backgroundColor, color, borderColor set dynamically
   },
-  sendButtonContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24, // Circular button
-    alignItems: 'center',
+  inputActionButton: {
+    padding: 8, // Hit area for buttons
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8, // Space between mic and send
+    // backgroundColor set dynamically
   },
   sendButtonDisabled: {
     opacity: 0.5,
   },
-
-  // --- Guest Banner ---
-  guestModeBanner: {
-    padding: 12,
-    borderTopWidth: 1,
+  typingIndicatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 15, // Match message padding
+    // backgroundColor set dynamically (usually same as chat background)
   },
-  guestModeText: {
-    fontSize: 14,
-    textAlign: 'center',
+  typingIndicatorAvatar: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      marginRight: 8,
+      borderWidth: 1,
+      // borderColor set dynamically
   },
-  guestModeUpgradeLink: {
-    fontWeight: 'bold',
+  typingIndicatorText: {
+      fontSize: 13,
+      // color set dynamically (subText)
+      marginRight: 4,
   },
-
-  // --- Theme Selector Modal ---
-  themeModalContainer: {
+  typingDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 10, // Fixed height for alignment
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 2,
+    // backgroundColor set dynamically (typingIndicator color)
+  },
+  // Staged Media Styles
+  stagedMediaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    marginBottom: 5,
+    // backgroundColor: colors.inputBackground, // Use input background
+    borderRadius: 10,
+  },
+  stagedMediaText: {
+    fontSize: 12,
+    // color: colors.subText,
+    marginRight: 8,
+  },
+  clearMediaButton: {
+    marginLeft: 'auto', // Push to the right
+    padding: 2,
+  },
+  // Recording Indicator Styles
+  recordingIndicator: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 70, // Adjust position as needed
     left: 0,
     right: 0,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  themeModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  themeModalTitle: {
+  recordingText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+  // Theme Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    // backgroundColor set dynamically (card)
+    maxHeight: '80%', // Limit modal height
+  },
+  modalTitle: {
     fontSize: 18,
     fontWeight: '600',
+    marginBottom: 20,
+    // color set dynamically (text)
   },
   themeListContainer: {
-    paddingVertical: 8,
+    alignItems: 'center', // Center items if not filling width
+    paddingBottom: 10,
   },
-  themeItemContainer: {
-    marginRight: 16,
+  themeItem: {
+    margin: 10,
     alignItems: 'center',
     borderWidth: 2,
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: 10,
+    padding: 5,
+    // borderColor set dynamically
+    width: 120, // Fixed width for theme items
+  },
+  themePreview: {
     width: 100,
-  },
-  themeItemSelected: {
-    // Border color is applied dynamically based on selection
-  },
-  themePreviewImage: {
-    width: 80,
-    height: 80,
+    height: 150, // Adjust aspect ratio as needed
     borderRadius: 8,
     marginBottom: 8,
-    borderWidth: 1, // Add border to previews
-    borderColor: 'rgba(0,0,0,0.1)', // Light border for previews
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden', // Ensure border radius applies to image
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)', // Light border for preview itself
   },
-  themeNameText: {
-    fontSize: 14,
+  themePreviewImage: {
+    borderRadius: 8, // Apply border radius to the image itself
+  },
+  defaultThemePreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    // backgroundColor set dynamically (background)
+  },
+  themeName: {
+    fontSize: 12,
+    // color set dynamically (subText)
+  },
+  closeButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  closeButtonText: {
+    fontSize: 16,
     fontWeight: '500',
+    // color set dynamically (closeButton color)
   },
 });

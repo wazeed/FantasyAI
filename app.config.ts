@@ -4,8 +4,8 @@ export default {
   name: "Fantasy AI",
   version: "1.0.0",
   extra: {
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabaseKey: process.env.SUPABASE_KEY,
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   },
   plugins: [
     [
