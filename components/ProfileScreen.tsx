@@ -43,6 +43,12 @@ type ProfileDataType = Partial<Tables<'profiles'>>; // Define type alias for pro
 
 const SETTINGS_CATEGORIES: SettingsCategoryType[] = [
   {
+    title: 'Account', // New Category
+    items: [
+      { title: 'Settings', icon: 'settings-outline', screen: 'Settings' }, // Added Settings navigation
+    ],
+  },
+  {
     title: 'Help & Support',
     items: [
       { title: 'Help Center', icon: 'help-circle-outline', screen: 'HelpCenter' },

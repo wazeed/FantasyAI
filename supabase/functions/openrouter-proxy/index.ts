@@ -1,16 +1,9 @@
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { corsHeaders } from '../_shared/cors.ts'; // Assuming a shared CORS config
+/// <reference types="https://deno.land/x/deno/cli/types/dts/lib.deno.d.ts" />
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { corsHeaders } from '../_shared/cors.ts'; // Added .ts extension
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// Define the expected request body structure
-interface RequestPayload {
-  prompt: string;
-  imageBase64?: string; // Optional Base64 encoded image string
-  audioBase64?: string; // Optional Base64 encoded audio string
-  // TODO: Add conversation history if needed by the model/app logic
-  // history?: Array<{ role: string; content: any }>;
-}
-
-// Define the structure for content parts (text, image, audio)
+// Define the structure for content parts (text, image, audio) - Keep as is
 interface ContentPart {
   type: 'text' | 'image_url' | 'audio_url'; // Added 'audio_url' based on assumption
   text?: string;
@@ -24,13 +17,26 @@ interface ContentPart {
   };
 }
 
-// Define the structure for a message in the OpenRouter payload
+// Define the structure for a message in the OpenRouter payload - Keep as is
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string | ContentPart[];
 }
 
-// Define the expected structure of the OpenRouter API request body
+// --- FIX: Update expected request payload structure ---
+interface RequestPayload {
+  model: string; // Expect model name from client
+  messages: Message[]; // Expect messages array from client
+  characterId: number; // Expect characterId (as number)
+  userId?: string; // Optional userId (for logged-in users)
+  conversationId?: string; // Optional conversationId (for logged-in users)
+  // Keep media fields if they are still relevant, otherwise remove
+  // imageBase64?: string; // Optional Base64 encoded image string
+  // audioBase64?: string; // Optional Base64 encoded audio string
+}
+
+
+// Define the expected structure of the OpenRouter API request body - Keep as is
 interface OpenRouterRequestBody {
   model: string;
   messages: Message[];
@@ -39,7 +45,7 @@ interface OpenRouterRequestBody {
   // temperature?: number;
 }
 
-// Define a simplified structure for the OpenRouter API response
+// Define a simplified structure for the OpenRouter API response - Keep as is
 // (Adjust based on the actual response structure you need)
 interface OpenRouterResponse {
   id: string;
@@ -78,7 +84,13 @@ serve(async (req: Request) => {
     let payload: RequestPayload;
     try {
       payload = await req.json();
-      console.log('Request payload received:', { prompt: payload.prompt, hasImage: !!payload.imageBase64, hasAudio: !!payload.audioBase64 });
+      // Log relevant parts of the received payload
+      console.log('Request payload received:', {
+          model: payload.model,
+          messageCount: payload.messages?.length,
+          characterId: payload.characterId,
+          userId: payload.userId
+      });
     } catch (error) {
       console.error('Failed to parse request body:', error);
       return new Response(JSON.stringify({ error: 'Bad Request: Invalid JSON' }), {
@@ -87,9 +99,10 @@ serve(async (req: Request) => {
       });
     }
 
-    if (!payload.prompt) {
-        console.error('Missing prompt in payload');
-        return new Response(JSON.stringify({ error: 'Bad Request: Missing prompt' }), {
+    // --- FIX: Validate required fields based on the new structure ---
+    if (!payload.model || !payload.messages || !Array.isArray(payload.messages) || payload.messages.length === 0 || !payload.characterId) {
+        console.error('Missing required fields in payload (model, messages array, characterId)');
+        return new Response(JSON.stringify({ error: 'Bad Request: Missing required fields (model, messages, characterId)' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -106,56 +119,11 @@ serve(async (req: Request) => {
     }
     console.log('Retrieved OpenRouter API Key from Vault.');
 
-    // --- Construct OpenRouter Payload ---
-    const messages: Message[] = [];
-    const contentParts: ContentPart[] = [{ type: 'text', text: payload.prompt }];
-
-    // Add image if provided
-    if (payload.imageBase64) {
-      // Basic validation: check if it looks like base64
-      if (payload.imageBase64.length > 100 && payload.imageBase64.match(/^[A-Za-z0-9+/=]+$/)) {
-         // Assuming JPEG format, adjust if needed (e.g., based on client-sent type)
-        contentParts.push({
-          type: 'image_url',
-          image_url: { url: `data:image/jpeg;base64,${payload.imageBase64}` },
-        });
-        console.log('Added image content part.');
-      } else {
-         console.warn('Invalid imageBase64 format received.');
-         // Optionally return an error or just ignore the invalid data
-      }
-    }
-
-    // Add audio if provided
-    // NOTE: Verify the exact format and capability with the specific OpenRouter model.
-    // This assumes a 'data:audio/...' format is accepted similarly to images.
-    if (payload.audioBase64) {
-       // Basic validation: check if it looks like base64
-       if (payload.audioBase64.length > 100 && payload.audioBase64.match(/^[A-Za-z0-9+/=]+$/)) {
-        // Assuming MP3 format, adjust if needed
-        contentParts.push({
-          type: 'audio_url', // Using 'audio_url' as a placeholder type
-          audio_url: { url: `data:audio/mp3;base64,${payload.audioBase64}` },
-        });
-        console.log('Added audio content part.');
-      } else {
-        console.warn('Invalid audioBase64 format received.');
-        // Optionally return an error or just ignore the invalid data
-      }
-    }
-
-    messages.push({ role: 'user', content: contentParts });
-
-    // TODO: Add system prompt or conversation history if applicable
-    // messages.unshift({ role: 'system', content: 'You are a helpful assistant.' });
-    // if (payload.history) {
-    //   messages.unshift(...payload.history);
-    // }
-
+    // --- FIX: Construct OpenRouter Payload using client's messages ---
+    // Directly use the messages array received from the client payload
     const openRouterPayload: OpenRouterRequestBody = {
-      // Using deepseek/deepseek-chat as requested, verify this is the correct/best multimodal model on OpenRouter
-      model: 'deepseek/deepseek-chat',
-      messages: messages,
+      model: payload.model, // Use model from client payload
+      messages: payload.messages, // Use messages array from client payload
       // max_tokens: 1024, // Example: uncomment and adjust if needed
     };
 
@@ -207,9 +175,54 @@ serve(async (req: Request) => {
         });
     }
 
+    // --- Save AI Response to Database (Only if userId is present) ---
+    if (payload.userId && payload.conversationId && payload.characterId) { // Ensure all required IDs are present
+      try {
+        const supabaseClient = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+          {
+            global: {
+              // Use the Authorization header from the original request to authenticate the client
+              headers: { Authorization: req.headers.get('Authorization')! },
+            },
+            // Important: Use service_role key for server-side operations that need to bypass RLS
+            // auth: { persistSession: false, autoRefreshToken: false } // Consider if needed
+          }
+        );
+        // If using service_role key, initialize differently:
+        // const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+        console.log(`Attempting to save AI message to DB for user: ${payload.userId}, conversation: ${payload.conversationId}`);
+
+        const { error } = await supabaseClient // Or supabaseAdmin if using service role
+          .from('messages')
+          .insert({
+            user_id: payload.userId,
+            character_id: payload.characterId,
+            conversation_id: payload.conversationId,
+            content: assistantMessage,
+            sender: 'ai',
+            created_at: new Date().toISOString()
+          });
+
+        if (error) {
+          console.error('Failed to save AI message to database for user:', payload.userId, error);
+          // Continue to return response even if DB fails
+        } else {
+          console.log('Successfully saved AI message to database for user:', payload.userId);
+        }
+      } catch (dbError) {
+        console.error('Error saving to database for user:', payload.userId, dbError);
+        // Continue to return response even if DB fails
+      }
+    } else {
+      console.log('Skipping database save (guest user or missing IDs).');
+    }
+
     // --- Return Success Response ---
     console.log('Sending successful response to client.');
-    return new Response(JSON.stringify({ message: assistantMessage }), {
+    return new Response(JSON.stringify({ message: assistantMessage }), { // Return the correct structure client expects
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

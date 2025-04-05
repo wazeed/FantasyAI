@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useContext, useCallback, useMemo } from 'react';
+import { LogBox } from 'react-native';
 import {
   View,
   Text,
@@ -19,6 +20,7 @@ import {
   ActivityIndicator, // Re-added for loading states
   GestureResponderEvent, // For typing Pressable events
 } from 'react-native';
+// import { GiftedChat, IMessage } from 'react-native-gifted-chat'; // Removed - Using custom FlatList
 import * as ImagePicker from 'expo-image-picker'; // Keep for image selection (input)
 // import { Audio, Recording } from 'expo-av'; // Keep Recording for input, remove Audio for playback
 import { Audio } from 'expo-av'; // Keep Audio for Recording permissions/instance
@@ -27,6 +29,7 @@ import * as FileSystem from 'expo-file-system'; // Import FileSystem
 import { supabase } from '../utils/supabase'; // Import Supabase client
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
+import { v4 as uuidv4 } from 'uuid'; // Added for unique ID generation
 // import { Ionicons } from '@expo/vector-icons'; // Removed - Mic/Attach icons handled elsewhere or removed if only for audio play
 // Re-import if needed for other icons like back arrow, theme selector etc. - Check ChatHeader/ChatInput usage
 import { Ionicons } from '@expo/vector-icons'; // Keeping for now, likely used in header/input
@@ -207,12 +210,12 @@ const CHAT_THEMES: ChatTheme[] = [
 function mapDbMessageToUIMessage(dbMsg: Message): UIMessage { // Use the imported Message type
   // Assuming DbMessage has an image_url field now
   return {
-    id: dbMsg.id ?? Crypto.randomUUID(),
-    text: dbMsg.content ?? (dbMsg.image_url || dbMsg.audio_url ? '' : '[empty message]'), // Empty text if media exists
+    id: dbMsg.id ?? Crypto.randomUUID(), // Use DB id if available, otherwise generate UUID
+    text: dbMsg.content ?? '[empty message]', // Use content directly, default if null/undefined
     sender: (dbMsg.sender ?? 'ai') as 'user' | 'ai',
     timestamp: dbMsg.created_at ? new Date(dbMsg.created_at).getTime() : Date.now(),
-    image_url: dbMsg.image_url ?? undefined,
-    audio_url: dbMsg.audio_url ?? undefined, // Map audio_url
+    // image_url and audio_url are not present on the DB Message type, so omit them here.
+    // The UIMessage type allows them to be optional.
   };
 }
 
@@ -368,6 +371,7 @@ const MessageItem = React.memo(({ item, characterAvatar, colors, isDarkMode, ani
 
   const aiAvatarSource = useMemo(() => getAvatarSource(characterAvatar), [characterAvatar]);
 
+
   return (
     <Animated.View
       style={[
@@ -503,7 +507,7 @@ const ChatInput = React.memo(({
           styles.sendButton,
           { backgroundColor: colors.sendButton },
           !canSend && styles.sendButtonDisabled,
-          pressed && canSend && { opacity: 0.8 }
+          pressed && canSend && { opacity: 0.7 }
         ]}
       >
         <Animated.View style={{ transform: [{ scale: sendButtonScale }] }}>
@@ -521,6 +525,7 @@ const ChatHeader = React.memo(({ character, colors, handleBack, handleThemePress
         if (typeof avatar === 'string' && avatar.startsWith('http')) return { uri: avatar };
         return require('../assets/profile-placeholder.png'); // Default placeholder
     };
+    const avatarSource = useMemo(() => getAvatarSource(character?.avatar), [character?.avatar]);
 
     return (
         <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -529,13 +534,11 @@ const ChatHeader = React.memo(({ character, colors, handleBack, handleThemePress
             </Pressable>
             <View style={styles.headerCenter}>
                 <Image
-                    source={getAvatarSource(character.avatar)}
+                    source={avatarSource}
                     style={[styles.headerAvatar, { borderColor: colors.avatarBorder }]}
                     onError={(e) => console.warn("Header avatar error:", e.nativeEvent.error)}
                 />
-                <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-                    {character.name}
-                </Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{character?.name || 'Chat'}</Text>
             </View>
             <Pressable onPress={handleThemePress} style={styles.headerButton}>
                 <Ionicons name="color-palette-outline" size={24} color={colors.text} />
@@ -545,6 +548,7 @@ const ChatHeader = React.memo(({ character, colors, handleBack, handleThemePress
 });
 
 const ThemeSelectorModal = React.memo(({ visible, onClose, themes, selectedTheme, onSelectTheme, colors }: ThemeSelectorModalProps) => {
+
     return (
         <Modal
             animationType="fade"
@@ -554,31 +558,31 @@ const ThemeSelectorModal = React.memo(({ visible, onClose, themes, selectedTheme
         >
             <Pressable style={styles.modalOverlay} onPress={onClose}>
                 <Pressable style={[styles.modalContent, { backgroundColor: colors.card }]}>
-                    <Text style={[styles.modalTitle, { color: colors.text }]}>Select Theme</Text>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Select Chat Theme</Text>
                     <FlatList
                         data={themes}
                         keyExtractor={(item) => item.id}
-                        numColumns={3} // Adjust number of columns as needed
+                        numColumns={2} // Display themes in two columns
+                        contentContainerStyle={styles.themeListContainer}
                         renderItem={({ item }) => (
                             <Pressable
                                 style={[
-                                    styles.themePreviewContainer,
-                                    item.id === selectedTheme.id && { borderColor: colors.themeSelectedBorder, borderWidth: 2 }
+                                    styles.themeItem,
+                                    { borderColor: item.id === selectedTheme.id ? colors.themeSelectedBorder : colors.themePreviewBorder }
                                 ]}
                                 onPress={() => onSelectTheme(item)}
                             >
                                 <ImageBackground
                                     source={item.background ?? undefined}
-                                    style={[styles.themePreview, { backgroundColor: colors.background }]} // Use background color as fallback
+                                    style={styles.themePreview}
                                     imageStyle={styles.themePreviewImage}
                                     resizeMode="cover"
                                 >
-                                    {/* Optional: Add a checkmark or indicator for selected theme */}
+                                    {!item.background && <View style={[styles.defaultThemePreview, { backgroundColor: colors.background }]} />}
                                 </ImageBackground>
                                 <Text style={[styles.themeName, { color: colors.subText }]}>{item.name}</Text>
                             </Pressable>
                         )}
-                        contentContainerStyle={styles.themeListContainer}
                     />
                     <Pressable onPress={onClose} style={styles.closeButton}>
                         <Text style={[styles.closeButtonText, { color: colors.closeButton }]}>Close</Text>
@@ -591,7 +595,7 @@ const ThemeSelectorModal = React.memo(({ visible, onClose, themes, selectedTheme
 
 const GuestModeBanner = React.memo(({ colors, onUpgradePress }: GuestModeBannerProps) => (
     <View style={[styles.guestBanner, { backgroundColor: colors.accent }]}>
-        <Text style={[styles.guestBannerText, { color: colors.text }]}>Guest Mode: History not saved.</Text>
+        <Text style={[styles.guestBannerText, { color: colors.text }]}>Guest Mode: History is local only.</Text>
         <Pressable onPress={onUpgradePress}>
             <Text style={[styles.guestBannerLink, { color: colors.primary }]}>Login/Sign Up</Text>
         </Pressable>
@@ -600,32 +604,43 @@ const GuestModeBanner = React.memo(({ colors, onUpgradePress }: GuestModeBannerP
 
 
 // --- Main Component ---
-
 export default function ChatScreen({ route, navigation }: ChatScreenProps) {
   const { character } = route.params;
-  const { user } = useAuth();
-  const { isDarkMode } = useContext(ThemeContext); // Removed 'theme' as it's not in the context value type
-  const colors = useDynamicColors(isDarkMode);
+  const { user } = useAuth(); // Get user context AT TOP LEVEL
+  const { isDarkMode } = useContext(ThemeContext); // Get theme context (Removed unused appTheme)
+  const colors = useDynamicColors(isDarkMode); // Get dynamic colors
 
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start loading initially
+  const [stagedMedia, setStagedMedia] = useState<StagedMedia | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [isThemeModalVisible, setIsThemeModalVisible] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ChatTheme>(CHAT_THEMES[0]); // Default theme
-  const [stagedMedia, setStagedMedia] = useState<StagedMedia | null>(null); // State for staged media
-  const [isPickingMedia, setIsPickingMedia] = useState(false); // Prevent concurrent media picks
 
   const flatListRef = useRef<FlatList>(null);
-  const subscriptionRef = useRef<RealtimeChannel | null>(null);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messageAnimations = useRef<{ [key: string]: { fadeAnim: Animated.Value; slideAnim: Animated.Value; scaleAnim: Animated.Value } }>({}).current;
   const sendButtonScale = useRef(new Animated.Value(1)).current;
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null); // For recording timer
-  const [recordingDuration, setRecordingDuration] = useState(0); // Recording duration state
+
+  // Initial welcome message effect
+  useEffect(() => {
+    if (character && messages.length === 0 && !isLoading) { // Only add if messages are empty and not loading
+      const welcomeText = generateWelcomeMessage(character);
+      const welcomeMessage: UIMessage = {
+        id: 'welcome-' + character.id,
+        text: welcomeText,
+        sender: 'ai',
+        timestamp: Date.now() - 1000, // Slightly before load time
+      };
+      setMessages([welcomeMessage]); // Prepend welcome message
+    }
+  }, [character, messages.length, isLoading]); // Depend on messages.length and isLoading
 
 
-  // --- Animation Handlers ---
-
+  // Animation handlers
   const animateButton = (toValue: number) => {
     Animated.spring(sendButtonScale, {
       toValue,
@@ -633,128 +648,145 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
       useNativeDriver: true,
     }).start();
   };
-
   const handlePressInSend = () => animateButton(0.9);
   const handlePressOutSend = () => animateButton(1);
 
+  // Get or create animation values for a message
   const getMessageAnimation = useCallback((messageId: string | number) => {
-    const idStr = String(messageId);
-    if (!messageAnimations[idStr]) {
-      messageAnimations[idStr] = {
+    const key = String(messageId);
+    if (!messageAnimations[key]) {
+      messageAnimations[key] = {
         fadeAnim: new Animated.Value(0),
         slideAnim: new Animated.Value(10),
         scaleAnim: new Animated.Value(0.95)
       };
       Animated.parallel([
-        Animated.timing(messageAnimations[idStr].fadeAnim, {
+        Animated.timing(messageAnimations[key].fadeAnim, {
           toValue: 1,
           duration: MESSAGE_ANIMATION_DURATION,
           useNativeDriver: true,
         }),
-        Animated.timing(messageAnimations[idStr].slideAnim, {
+        Animated.timing(messageAnimations[key].slideAnim, {
           toValue: 0,
           duration: MESSAGE_ANIMATION_DURATION,
           useNativeDriver: true,
         }),
-        Animated.timing(messageAnimations[idStr].scaleAnim, {
+        Animated.timing(messageAnimations[key].scaleAnim, {
           toValue: 1,
           duration: MESSAGE_ANIMATION_DURATION,
           useNativeDriver: true,
         }),
       ]).start();
     }
-    return messageAnimations[idStr];
-  }, [messageAnimations]);
+    return messageAnimations[key];
+  }, [messageAnimations]); // messageAnimations is stable
 
-
-  // --- Utility Functions ---
-
+  // Scroll to bottom helper
   const scrollToBottom = useCallback(() => {
-    // Use setTimeout to allow FlatList to update before scrolling
+    // Use setTimeout to ensure FlatList has updated
     setTimeout(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-    }, 100); // Adjust delay if needed
+      flatListRef.current?.scrollToOffset({ animated: true, offset: 0 });
+    }, 100); // Small delay
   }, []);
 
 
-  // --- Data Fetching and Subscription ---
-
+  // Load initial messages and subscribe to realtime updates
   useEffect(() => {
+    let channel: RealtimeChannel | null = null;
     const loadChat = async () => {
       setIsLoading(true);
-      let initialMessages: UIMessage[] = [];
-
-      if (user && user.id && character?.id) {
-        // Logged-in user: Fetch from DB
-        const dbMessages = await getChatMessages(user.id, character.id);
-        initialMessages = dbMessages.map(mapDbMessageToUIMessage);
-      } else if (character?.id) {
-        // Guest user: Load from AsyncStorage (if implemented) or start fresh
-        // For now, guests start fresh, but could load from guest session storage
-        console.log("Guest mode: Starting new chat session.");
+      try {
+        if (user?.id && character?.id) {
+          // Logged-in user: Fetch from DB
+          const dbMessages = await getChatMessages(user.id, character.id);
+          const uiMessages = dbMessages.map(mapDbMessageToUIMessage);
+          setMessages(uiMessages);
+        } else if (character?.id) {
+          console.log('CHAT_SCREEN [Guest Load]: Loading messages for guest.');
+          // Guest user: Load from AsyncStorage
+          const storageKey = `guest_conversation_${character.id}`;
+          console.log(`CHAT_SCREEN [Guest Load]: Using storage key: ${storageKey}`);
+          const storedMessagesRaw = await AsyncStorage.getItem(storageKey);
+          console.log(`CHAT_SCREEN [Guest Load]: Raw data from AsyncStorage:`, storedMessagesRaw);
+          if (storedMessagesRaw) {
+            try {
+              const storedMessages: UIMessage[] = JSON.parse(storedMessagesRaw);
+              // console.log(`CHAT_SCREEN [Guest Load]: Parsed messages from AsyncStorage:`, JSON.stringify(storedMessages, null, 2)); // Keep commented unless needed
+              // Basic validation
+              if (Array.isArray(storedMessages)) {
+                // Ensure messages have necessary fields (simple check)
+                const validMessages = storedMessages.filter(m => m && m.id && m.text && m.sender && m.timestamp);
+                setMessages(validMessages);
+              } else {
+                 console.warn(`CHAT_SCREEN [Guest Load]: Invalid data format in AsyncStorage for key ${storageKey}. Expected array.`);
+                 setMessages([]); // Reset to empty if data is invalid
+              }
+            } catch (parseError) {
+              console.error(`CHAT_SCREEN [Guest Load]: Error parsing guest messages from AsyncStorage for key ${storageKey}:`, parseError);
+              setMessages([]); // Reset on parse error
+            }
+          } else {
+            setMessages([]); // No stored messages, start empty
+          }
+        } else {
+          console.warn("CHAT_SCREEN: Cannot load chat - missing user ID or character ID.");
+          setMessages([]); // Ensure messages are empty if IDs are missing
+        }
+      } catch (error) {
+        console.error("CHAT_SCREEN: Error loading chat messages:", error);
+        Alert.alert("Error", "Could not load chat history.");
+        setMessages([]); // Reset on error
+      } finally {
+        setIsLoading(false);
       }
 
-      // Add welcome message if chat is empty
-      if (initialMessages.length === 0 && character) {
-        const welcomeText = generateWelcomeMessage(character);
-        initialMessages.push({
-          id: 'welcome-' + Crypto.randomUUID(),
-          text: welcomeText,
-          sender: 'ai',
-          timestamp: Date.now(),
+      // Subscribe to realtime updates only for logged-in users
+      if (user?.id && character?.id) {
+        channel = subscribeToNewMessages(user.id, character.id, (newMessage) => {
+          console.log('Realtime message received:', newMessage);
+          const uiMessage = mapDbMessageToUIMessage(newMessage);
+          // Use functional update to avoid race conditions and ensure correct order
+          setMessages(prevMessages => {
+            // Check if message already exists (by DB ID if available)
+            if (prevMessages.some(msg => msg.id === uiMessage.id)) {
+              return prevMessages; // Already exists, don't add again
+            }
+            // Assuming inverted list, add new message to the beginning
+            return [uiMessage, ...prevMessages];
+          });
+          scrollToBottom(); // Scroll when new message arrives
         });
+        console.log('Subscribed to realtime channel:', channel);
       }
-
-      // Reverse messages for FlatList inverted display (newest at bottom)
-      setMessages(initialMessages.reverse());
-      setIsLoading(false);
-      scrollToBottom(); // Scroll after initial load
     };
 
-    loadChat();
-
-    // Set up real-time subscription if logged in
-    if (user && user.id && character?.id) {
-      const channel = subscribeToNewMessages(user.id, character.id, (newMessage) => {
-        // Avoid adding duplicate messages if sender is the current user
-        // (DB insert might trigger subscription before local state update finishes)
-        if (newMessage.sender === 'user' && newMessage.user_id === user.id) {
-          // Optional: Could potentially update the UI message ID if needed, but usually not necessary
-          return;
-        }
-        // Add new AI messages received via subscription
-        if (newMessage.sender === 'ai') {
-            setMessages(prevMessages => [mapDbMessageToUIMessage(newMessage), ...prevMessages]);
-            scrollToBottom();
-        }
-      });
-      subscriptionRef.current = channel;
+    if (character?.id) { // Only load if character exists
+        loadChat();
+    } else {
+        console.error("CHAT_SCREEN: Character data is missing, cannot load chat.");
+        setIsLoading(false); // Stop loading if no character
+        setMessages([]);
     }
 
     // Cleanup function
     return () => {
-      if (subscriptionRef.current) {
-        unsubscribeFromChat(subscriptionRef.current);
-        subscriptionRef.current = null;
-      }
-      // Clear recording timer on unmount
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
+      if (channel) {
+        console.log('Unsubscribing from channel:', channel);
+        unsubscribeFromChat(channel);
       }
     };
-  }, [user, character, scrollToBottom]); // Dependencies for loading and subscription
+  }, [user?.id, character?.id, scrollToBottom]); // Re-run if user or character changes
 
-
-  // --- Theme Handling ---
-
+  // Load selected theme from AsyncStorage
   useEffect(() => {
-    // Load saved theme preference from AsyncStorage or use default
     const loadTheme = async () => {
       try {
-        const savedThemeId = await AsyncStorage.getItem(`chatTheme_${character?.id}`);
-        const foundTheme = CHAT_THEMES.find(t => t.id === savedThemeId);
-        if (foundTheme) {
-          setSelectedTheme(foundTheme);
+        const savedThemeId = await AsyncStorage.getItem(`chat_theme_${character.id}`);
+        if (savedThemeId) {
+          const foundTheme = CHAT_THEMES.find(t => t.id === savedThemeId);
+          if (foundTheme) {
+            setSelectedTheme(foundTheme);
+          }
         }
       } catch (error) {
         console.error("Error loading chat theme:", error);
@@ -765,95 +797,72 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
     }
   }, [character?.id]);
 
+  // Handle theme selection and save
   const handleSelectTheme = useCallback(async (theme: ChatTheme) => {
     setSelectedTheme(theme);
     setIsThemeModalVisible(false);
     try {
-      if (character?.id) {
-        await AsyncStorage.setItem(`chatTheme_${character.id}`, theme.id);
-      }
+      await AsyncStorage.setItem(`chat_theme_${character.id}`, theme.id);
     } catch (error) {
       console.error("Error saving chat theme:", error);
+      Alert.alert("Error", "Could not save theme preference.");
     }
   }, [character?.id]);
 
   const handleThemePress = () => setIsThemeModalVisible(true);
 
-
   // --- Media Handling ---
 
-  // Function to clear staged media
-  const clearStagedMedia = useCallback(() => {
-    setStagedMedia(null);
-  }, []);
+  const clearStagedMedia = () => setStagedMedia(null);
 
-  // Function to handle picking media from library
+  // Request permissions and pick image/video
   const handlePickMedia = useCallback(async () => {
-    if (isPickingMedia) return;
-    setIsPickingMedia(true);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to make this work!');
+      return;
+    }
 
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Media library permission is required to attach files.');
-        setIsPickingMedia(false);
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All, // Allow images and videos initially
-        allowsEditing: false,
-        quality: 0.6,
-        base64: true,
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images, // Allow only images for now
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7, // Reduce quality slightly for faster uploads
+        base64: true, // Request base64 encoding
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-
-        // Determine if it's an image or audio (Expo AV might be needed for better audio type detection)
-        // ImagePicker returns 'image' or 'video'. We'll treat 'video' as potential audio for now.
-        const mediaType: 'image' | 'audio' = asset.type === 'image' ? 'image' : 'audio';
-        const mimeType = asset.mimeType; // Get mimeType if available
-
-        if (asset.base64) {
-          // console.log(`Staging ${mediaType}: ${asset.uri.substring(0, 50)}...`);
+        if (asset.base64 && asset.uri) {
           setStagedMedia({
             uri: asset.uri,
             base64: asset.base64,
-            type: mediaType,
-            mimeType: mimeType // Store mimeType
+            type: 'image', // Hardcoded as image for now
+            mimeType: asset.mimeType ?? 'image/jpeg', // Get mimeType if available
           });
           setInputText(''); // Clear text input when media is staged
         } else {
-          Alert.alert('Error', 'Could not get base64 data for the selected file.');
+          console.warn("ImagePicker result missing base64 or uri:", asset);
+          Alert.alert("Error", "Could not process the selected image.");
         }
       }
     } catch (error) {
-      console.error("Error picking media:", error);
-      Alert.alert('Error', 'An error occurred while selecting media.');
-    } finally {
-      setIsPickingMedia(false); // Ensure loading state is reset
+        console.error("Error picking media:", error);
+        Alert.alert("Error", "An error occurred while selecting media.");
     }
-  }, [isPickingMedia, setInputText]); // Add setInputText dependency
+  }, []);
+
 
   // --- Audio Recording ---
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
 
   const startRecording = useCallback(async () => {
-    // Prevent starting if media is already staged
-    if (stagedMedia) {
-        Alert.alert("Media Staged", "Clear the current attachment before recording audio.");
-        return;
-    }
     try {
-      console.log('Requesting permissions..');
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Microphone permission is required to record audio.');
+        Alert.alert('Permission Required', 'Microphone permission is needed for audio recording.');
         return;
       }
-      console.log('Permissions granted.');
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -865,199 +874,275 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
          Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       setRecording(newRecording);
-      setIsRecording(true);
+      setRecordingDuration(0); // Reset duration
       console.log('Recording started');
 
-      // Start duration timer
-      setRecordingDuration(0);
-      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+      // Start timer to update duration
       recordingIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
 
     } catch (err) {
       console.error('Failed to start recording', err);
-      Alert.alert('Recording Error', 'Could not start audio recording.');
+      Alert.alert("Recording Error", "Could not start audio recording.");
     }
-  }, [stagedMedia]); // Add stagedMedia dependency
+  }, []);
 
   const stopRecording = useCallback(async () => {
+    console.log('Stopping recording..');
     if (!recording) return;
 
-    console.log('Stopping recording..');
-    setIsRecording(false);
+    // Clear timer
     if (recordingIntervalRef.current) {
-      clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = null;
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
     }
-    setRecordingDuration(0); // Reset duration
 
     try {
-      await recording.stopAndUnloadAsync();
-      // await Audio.setAudioModeAsync({ allowsRecordingIOS: false }); // Reset mode after stopping
-      const uri = recording.getURI();
-      console.log('Recording stopped and stored at', uri);
-      if (uri) {
-        try {
-          console.log('Reading audio file:', uri);
-          const base64 = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          console.log('Audio Base64 generated (first 50 chars):', base64.substring(0, 50));
-          // Determine mime type for audio recording (adjust if needed)
-          const mimeType = Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mpeg'; // Common defaults
-          setStagedMedia({ uri, base64, type: 'audio', mimeType });
-          setInputText(''); // Clear text input when media is staged
-        } catch (readError) {
-          console.error('Error reading audio file:', readError);
-          Alert.alert('Error', 'Failed to read recorded audio file.'); // Use Alert
-        }
-      } else {
-        console.warn('Recording URI is null after stopping.');
-        Alert.alert('Error', 'Could not get the recorded audio file.'); // Use Alert
-      }
-      setRecording(null); // Clear the recording object
-    } catch (error) {
-      console.error('Failed to stop or unload recording', error);
-      Alert.alert('Error', 'There was an issue stopping the recording.'); // Use Alert
-      setRecording(null); // Still try to clear the recording object
-    }
-  }, [recording, setInputText]); // Add setInputText dependency
+        await recording.stopAndUnloadAsync();
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false }); // Reset audio mode
+        const uri = recording.getURI();
+        console.log('Recording stopped and stored at', uri);
 
-  // Combined handler for the attach button
+        if (uri) {
+            // Read the file and convert to base64
+            const base64 = await FileSystem.readAsStringAsync(uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            setStagedMedia({
+                uri: uri,
+                base64: base64,
+                type: 'audio',
+                mimeType: 'audio/mp4', // Adjust if using a different format
+            });
+            setInputText(''); // Clear text input
+        }
+    } catch (error) {
+        console.error('Failed to stop recording or process audio', error);
+        Alert.alert("Recording Error", "Could not stop or process the audio recording.");
+    } finally {
+        setRecording(null); // Clear recording object
+        setRecordingDuration(0); // Reset duration display
+    }
+  }, [recording]);
+
+  const handleMicPress = useCallback(() => {
+    if (recording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [recording, startRecording, stopRecording]);
+
   const handleAttachPress = useCallback(() => {
-      // Simple example: Just trigger media picking for now
-      // Could later add options (Camera, Library, File)
-      handlePickMedia();
+    // Simple alert to choose media type for now
+    Alert.alert(
+      "Attach Media",
+      "Choose media type to attach:",
+      [
+        { text: "Image", onPress: handlePickMedia },
+        // { text: "Audio", onPress: () => console.log("Audio attach TBD") }, // Placeholder
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
   }, [handlePickMedia]);
 
 
-  // --- Message Sending ---
+  // --- Send Message Logic ---
   const handleSendMessage = useCallback(async () => {
-    const trimmedInput = inputText.trim();
-    const currentStagedMedia = stagedMedia; // Capture staged media at the time of sending
+    // Use the 'user' from the component scope, not from calling useAuth() again
+    const isGuest = !user?.id;
+    console.log(`CHAT_SCREEN [handleSendMessage]: Function called! isGuest: ${isGuest}`);
 
-    // Prevent sending if nothing is staged/typed or AI is speaking
-    if ((!trimmedInput && !currentStagedMedia) || isAISpeaking) return;
+    const textToSend = inputText.trim();
+    const mediaToSend = stagedMedia; // Capture staged media
+    console.log(`CHAT_SCREEN [handleSendMessage]: textToSend = "${textToSend}"`); // Keep this log
+    console.log(`CHAT_SCREEN [handleSendMessage]: mediaToSend =`, mediaToSend); // Keep this log
 
-    Keyboard.dismiss();
-    setIsAISpeaking(true); // Indicate AI is processing
+    // Reset input and staged media immediately
+    setInputText('');
+    setStagedMedia(null);
+    Keyboard.dismiss(); // Dismiss keyboard on send
 
-    // Determine user message text for UI and DB
-    let userMessageTextForDisplay = trimmedInput;
-    if (!trimmedInput && currentStagedMedia) {
-      userMessageTextForDisplay = `[Sent ${currentStagedMedia.type}]`; // Placeholder text
-    } else if (trimmedInput && currentStagedMedia) {
-      // Optional: Combine text and media placeholder if needed for UI clarity
-      // userMessageTextForDisplay = `${trimmedInput} [Attached ${currentStagedMedia.type}]`;
-      // Keep it simple for now, just use the text if provided
+    if (!textToSend && !mediaToSend) {
+      console.log("CHAT_SCREEN [handleSendMessage]: Attempted to send empty message. Exiting.");
+      return; // Don't send empty messages
     }
 
-
-    // Create user message object for UI
-    const userMessageForUI: UIMessage = {
-      id: Crypto.randomUUID(),
-      text: userMessageTextForDisplay, // Use the determined text
+    // --- Create User Message for UI ---
+    const userMessage: UIMessage = {
+      id: uuidv4(), // Generate unique ID for UI message
+      text: textToSend,
       sender: 'user',
       timestamp: Date.now(),
-      // Do not include image/audio URLs here as per instructions
+      image_url: mediaToSend?.type === 'image' ? mediaToSend.uri : undefined,
+      audio_url: mediaToSend?.type === 'audio' ? mediaToSend.uri : undefined,
     };
+    console.log(`CHAT_SCREEN [handleSendMessage]: Created user message for UI:`, userMessage);
 
     // Add user message to UI immediately
-    setMessages(prevMessages => [userMessageForUI, ...prevMessages].sort((a, b) => b.timestamp - a.timestamp)); // Keep sorted reverse-chronologically
-    scrollToBottom();
+    // Use functional update and add to the beginning (since list is inverted)
+    setMessages(prev => {
+        console.log(`CHAT_SCREEN [handleSendMessage setMessages User]: Adding user message to state. Prev count: ${prev.length}`);
+        const newMessages = [userMessage, ...prev];
+        console.log(`CHAT_SCREEN [handleSendMessage setMessages User]: New count: ${newMessages.length}`);
+        return newMessages;
+    });
+    scrollToBottom(); // Scroll after adding user message
 
-    // User message saving is now handled by the Edge Function
+    // --- Prepare data for AI/DB ---
+    setIsAISpeaking(true); // Indicate AI is processing
 
-    // Prepare chat history for AI (limit context size if needed)
-    // Use the current UI messages state (reversed for chronological order for AI)
-    const historyForAI = messages
-      .slice(0, 10) // Take the 10 most recent UI messages
-      .reverse() // Reverse to get chronological order
+    // FIX: Construct history based on the state *after* adding the user message
+    const messagesIncludingNewUser = [userMessage, ...messages]; // Manually create the array as it should be after the state update
+    const historyForAI = messagesIncludingNewUser
+      .slice(1, 11) // Slice from index 1 to exclude the current message, take up to 10 previous
+      .filter(msg => msg.text)
       .map(msg => ({
-        // Explicitly cast the role to the expected type
-        role: msg.sender === 'user' ? 'user' : ('assistant' as 'user' | 'assistant'),
-        content: msg.text, // Use text content for history
-      }));
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text,
+      }))
+      .reverse(); // Reverse to get chronological order
 
-    // Clear input fields AFTER initiating the call
-    setInputText('');
-    setStagedMedia(null); // Clear staged media
+    console.log(`CHAT_SCREEN [handleSendMessage]: History for AI (excluding current):`, JSON.stringify(historyForAI, null, 2));
 
-    // Call the Supabase Edge Function to handle AI processing and DB saving
-    try {
-      if (!character?.id) {
-        throw new Error("Character ID is missing.");
-      }
 
-      // Prepare payload for the Edge Function
-      const functionPayload = {
-        prompt: trimmedInput,
-        imageBase64: currentStagedMedia?.type === 'image' ? currentStagedMedia.base64 : undefined,
-        audioBase64: currentStagedMedia?.type === 'audio' ? currentStagedMedia.base64 : undefined,
-        mimeType: currentStagedMedia?.mimeType, // Pass mimeType
-        userId: user?.id, // Pass user ID (can be null for guests)
-        characterId: character.id,
-        // Pass minimal chat history if needed by the function (optional, depends on function implementation)
-        // chatHistory: historyForAI,
-      };
-
-      console.log('Invoking openrouter-proxy with payload:', {
-          ...functionPayload,
-          imageBase64: functionPayload.imageBase64 ? '...' : undefined, // Avoid logging full base64
-          audioBase64: functionPayload.audioBase64 ? '...' : undefined,
+    // Construct the current user message content for the AI
+    let currentUserContent: OpenRouterMessageContent = [];
+    if (textToSend) {
+      currentUserContent.push({ type: 'text', text: textToSend });
+    }
+    if (mediaToSend?.type === 'image' && mediaToSend.base64) {
+      currentUserContent.push({
+        type: 'image_url',
+        image_url: { url: `data:${mediaToSend.mimeType ?? 'image/jpeg'};base64,${mediaToSend.base64}` }
       });
+    }
+    // Note: Sending audio base64 directly might not be supported by all models.
+    // This might need adjustment based on the specific AI model's capabilities.
+    // if (mediaToSend?.type === 'audio' && mediaToSend.base64) {
+    //   // How to represent audio depends on the model. Placeholder:
+    //   currentUserContent.push({ type: 'text', text: `[User sent audio: ${mediaToSend.mimeType ?? 'audio/mp4'}]` });
+    // }
 
-      const { data, error } = await supabase.functions.invoke('openrouter-proxy', {
-        body: functionPayload,
-      });
-
-      if (error) {
-        console.error('Supabase function invocation error:', error);
-        // Add error message to UI
-        addMessage({
-          id: Crypto.randomUUID(),
-          text: `Error communicating with AI: ${error.message || 'Unknown error'}`,
-          sender: 'ai',
-          timestamp: Date.now(),
-        });
-        throw new Error(`Function error: ${error.message}`);
-      }
-
-      console.log('Supabase function response:', data);
-
-      // The Edge Function now handles saving both user and AI messages.
-      // The AI response will arrive via the Realtime subscription.
-      // We don't need to manually add the AI response to the UI here.
-
-      // Update guest chat session if needed (using the AI response text if returned by function, or a placeholder)
-      if (!user && character?.id) {
-          // Assuming the function might return the AI text for guest mode update
-          const aiResponseTextForGuest = data?.aiResponse ?? '[AI response]';
-          await updateGuestChatSession(character.id, character.name, aiResponseTextForGuest);
-      }
-
-    } catch (error) {
-      console.error('Error sending message via Edge Function:', error);
-      Alert.alert('Error', `Failed to get response: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      // Optionally add a local error message to the chat UI
-      const errorMessage: UIMessage = {
-        id: Crypto.randomUUID(),
-        text: "Sorry, I couldn't connect. Please try again.",
-        sender: 'ai', // Display as an AI message for consistency
-        timestamp: Date.now(),
-      };
-      setMessages(prevMessages => [errorMessage, ...prevMessages].sort((a, b) => b.timestamp - a.timestamp));
-      scrollToBottom();
-    } finally {
-      setIsAISpeaking(false); // Ensure loading state is turned off
+    // If only text was sent, simplify content structure
+    if (currentUserContent.length === 1 && currentUserContent[0].type === 'text') {
+      currentUserContent = currentUserContent[0].text;
+    } else if (currentUserContent.length === 0) {
+        console.warn("handleSendMessage: No content to send to AI.");
+        setIsAISpeaking(false);
+        return; // Should not happen if check at start works, but safeguard
     }
 
-  }, [inputText, stagedMedia, isAISpeaking, user, character, messages, setMessages, scrollToBottom, setStagedMedia, setInputText]); // Added dependencies
+    const messagesForFunction = [
+        ...historyForAI,
+        { role: 'user', content: currentUserContent } // Add the current message separately
+    ];
+    console.log(`CHAT_SCREEN [handleSendMessage]: Complete messagesForFunction:`, JSON.stringify(messagesForFunction, null, 2)); // Log the final payload
 
 
-  // --- Render ---
+    try {
+      if (user?.id && character?.id) {
+        // --- Logged-in User Logic ---
+        console.log(`CHAT_SCREEN [handleSendMessage LoggedIn]: Sending message to DB...`);
+        // Send message to DB (which triggers Edge Function via hook/trigger)
+        // Corrected arguments for sendMessageToDb: userId, characterId, content, sender, imageUrl, audioUrl
+        await sendMessageToDb(user.id, character.id, textToSend, 'user', mediaToSend?.type === 'image' ? mediaToSend.uri : undefined, mediaToSend?.type === 'audio' ? mediaToSend.uri : undefined);
+        console.log(`CHAT_SCREEN [handleSendMessage LoggedIn]: Message sent to DB. Waiting for realtime response.`);
+        // Realtime subscription will handle adding the AI message to the UI
+        setIsAISpeaking(false); // Let realtime handle AI message display
+      } else if (character?.id) {
+        // --- Guest User Logic ---
+        console.log(`CHAT_SCREEN [handleSendMessage Guest]: Calling Edge Function 'openrouter-proxy'...`);
+        // Call the Edge Function directly
+        const { data, error } = await supabase.functions.invoke('openrouter-proxy', {
+          body: JSON.stringify({
+            model: "openai/gpt-4o-mini", // Or fetch dynamically
+            messages: messagesForFunction, // Use the corrected history + current message
+            characterId: character.id, // Pass character ID for context/logging
+            // No userId for guests
+          }),
+        });
+        console.log(`CHAT_SCREEN [handleSendMessage Guest]: Edge Function response - data:`, JSON.stringify(data, null, 2));
+        console.log(`CHAT_SCREEN [handleSendMessage Guest]: Edge Function response - error:`, error);
 
+        setIsAISpeaking(false); // AI finished
+
+        if (error) {
+          console.error("CHAT_SCREEN [Guest Send Error]: Edge function error:", error);
+          Alert.alert("AI Error", `Could not get response: ${error.message}`);
+          // Optionally add an error message to the chat UI
+          setMessages(prev => [{ id: uuidv4(), text: `Error: ${error.message}`, sender: 'ai', timestamp: Date.now() }, ...prev]);
+          return;
+        }
+
+        if (!data?.message) {
+            console.error("CHAT_SCREEN [Guest Send Error]: No message content in Edge function response:", data);
+            Alert.alert("AI Error", "Received an empty response from the AI.");
+            setMessages(prev => [{ id: uuidv4(), text: "[AI response was empty]", sender: 'ai', timestamp: Date.now() }, ...prev]);
+            return;
+        }
+
+        // --- Guest User Specific Logic ---
+        // Use the component-scoped 'user' here too
+        if (!user?.id && data?.message) { // Check for guest and message existence
+          console.log(`CHAT_SCREEN [handleSendMessage Guest]: AI response received: "${data.message}"`);
+          const newAiMessageForUI: UIMessage = {
+            id: Crypto.randomUUID(),
+            text: data.message, // Use the message from the response
+            sender: 'ai',
+            timestamp: Date.now(),
+          };
+          console.log(`CHAT_SCREEN [handleSendMessage Guest]: Created new AI message for UI:`, JSON.stringify(newAiMessageForUI, null, 2));
+          setMessages(previousMessages => {
+              console.log(`CHAT_SCREEN [handleSendMessage Guest setMessages]: Previous messages count: ${previousMessages.length}`);
+              // Ensure we don't add duplicates if the message somehow got added already
+              if (previousMessages.some(msg => msg.id === newAiMessageForUI.id)) {
+                  console.log(`CHAT_SCREEN [handleSendMessage Guest setMessages]: Duplicate AI message detected (ID: ${newAiMessageForUI.id}), not adding.`);
+                  return previousMessages;
+              }
+              // IMPORTANT: Assuming FlatList inverted={true}, new messages should be added to the START
+              const newMessages = [newAiMessageForUI, ...previousMessages];
+              console.log(`CHAT_SCREEN [handleSendMessage Guest setMessages]: New messages count: ${newMessages.length}`);
+              return newMessages;
+          });
+          // Save updated messages to AsyncStorage *after* state update (using a separate useEffect might be safer)
+          try {
+            const storageKey = `guest_conversation_${character.id}`;
+            console.log(`CHAT_SCREEN [handleSendMessage Guest Save]: Attempting to save to AsyncStorage. Key: ${storageKey}`);
+            // Get the latest state by using the functional update pattern's result conceptually
+            let finalMessagesToSave: UIMessage[] = [];
+            setMessages(currentMessages => {
+                finalMessagesToSave = currentMessages; // Capture the *actual* latest state
+                return currentMessages; // No change needed here, just capturing
+            });
+            // Now use finalMessagesToSave which should be the most up-to-date
+            const messagesToSaveString = JSON.stringify(finalMessagesToSave);
+            console.log(`CHAT_SCREEN [handleSendMessage Guest Save]: Stringified messages being saved (length: ${messagesToSaveString.length}):`, messagesToSaveString.substring(0, 500) + '...');
+            await AsyncStorage.setItem(storageKey, messagesToSaveString);
+            console.log(`CHAT_SCREEN [handleSendMessage Guest Save]: Successfully saved to AsyncStorage.`);
+          } catch (saveError) {
+            console.error("CHAT_SCREEN [handleSendMessage Guest Save Error]: Failed to save guest messages:", saveError);
+            Alert.alert("Save Error", "Could not save the conversation history.");
+          }
+          scrollToBottom(); // Scroll after adding AI message
+        }
+      } else {
+        console.error("CHAT_SCREEN: Cannot send message - missing character ID.");
+        Alert.alert("Error", "Character information is missing.");
+        setIsAISpeaking(false);
+      }
+    } catch (error) {
+      console.error("CHAT_SCREEN: Error sending message:", error);
+      Alert.alert("Error", `An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsAISpeaking(false);
+      // Optionally add an error message to the chat UI
+      setMessages(prev => [{ id: uuidv4(), text: `Error sending: ${error instanceof Error ? error.message : 'Unknown error'}`, sender: 'ai', timestamp: Date.now() }, ...prev]);
+    }
+  }, [messages, user?.id, character?.id, isAISpeaking, stagedMedia, scrollToBottom, inputText]); // Keep inputText dependency
+
+
+  // Render message item
   const renderItem = useCallback(({ item }: { item: UIMessage }) => (
     <MessageItem
       item={item}
@@ -1066,22 +1151,44 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
       isDarkMode={isDarkMode}
       animation={getMessageAnimation(item.id)}
     />
-  ), [character.avatar, colors, isDarkMode, getMessageAnimation]); // Dependencies for memoization
+  ), [character?.avatar, colors, isDarkMode, getMessageAnimation]); // Dependencies for renderItem
 
+
+  // Determine background source based on theme
+  const backgroundSource = useMemo(() => {
+    if (selectedTheme.background) {
+      return selectedTheme.background;
+    }
+    // Return null or a default background if needed when no theme background is set
+    return undefined; // Let ImageBackground handle undefined source potentially
+  }, [selectedTheme]);
+
+  // Debug log for messages state changes
+  useEffect(() => {
+    console.log('CHAT_SCREEN [State Update]: messages state changed:', {
+      count: messages.length,
+      isLoading,
+      isGuest: !user?.id,
+      firstMsgText: messages[0]?.text.substring(0, 20) + '...', // Log first message snippet
+      lastMsgText: messages[messages.length - 1]?.text.substring(0, 20) + '...' // Log last message snippet
+    });
+  }, [messages, isLoading, user]); // Dependencies array
+
+  // Moved isLoading check here to ensure hooks are called consistently
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.safeAreaLoading, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.card }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
       </SafeAreaView>
     );
   }
 
-  const backgroundSource = selectedTheme.background;
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.card }]}>
       <ImageBackground
-        source={backgroundSource ?? undefined} // Use undefined if null
+        source={backgroundSource}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
@@ -1091,24 +1198,26 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
           handleBack={() => navigation.goBack()}
           handleThemePress={handleThemePress}
         />
-        {!user && <GuestModeBanner colors={colors} onUpgradePress={() => navigation.navigate('Login')} />}
+        {!user?.id && <GuestModeBanner colors={colors} onUpgradePress={() => navigation.navigate('Login')} />}
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.keyboardAvoidingView}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0} // Adjust offset as needed
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flexOne}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0} // Adjust offset as needed
         >
           <View style={styles.container}>
             <FlatList
               ref={flatListRef}
-              data={messages}
+              // Log the data prop being passed to FlatList (only when it changes significantly)
+              data={messages} // Log messages state directly if needed: console.log('[FlatList Data] Passing messages to FlatList:', messages);
               renderItem={renderItem}
+              onLayout={() => console.log(`CHAT_SCREEN [FlatList]: Rendering with messages count: ${messages.length}`)} // Simplified log
               keyExtractor={(item) => String(item.id)}
-              inverted // Shows latest messages at the bottom
-              contentContainerStyle={styles.listContentContainer}
-              style={{ flex: 1 }} // Ensure FlatList takes up space
-              {...FLATLIST_OPTIMIZATION_PROPS}
-              ListFooterComponent={isAISpeaking ? <TypingIndicatorDisplay character={character} colors={colors} /> : null}
+              style={styles.messageList}
+              contentContainerStyle={styles.messageListContent}
+              inverted // Display messages from bottom to top
               keyboardShouldPersistTaps="handled"
+              {...FLATLIST_OPTIMIZATION_PROPS} // Apply optimizations
+              ListFooterComponent={isAISpeaking ? <TypingIndicatorDisplay character={character} colors={colors} /> : null}
             />
             <ChatInput
               inputText={inputText}
@@ -1119,17 +1228,16 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
               sendButtonScale={sendButtonScale}
               handlePressInSend={handlePressInSend}
               handlePressOutSend={handlePressOutSend}
-              onMicPress={isRecording ? stopRecording : startRecording} // Toggle recording
-              onAttachPress={handleAttachPress} // Pass attach handler
-              stagedMedia={stagedMedia} // Pass staged media state
-              clearStagedMedia={clearStagedMedia} // Pass clear function
+              onMicPress={handleMicPress}
+              onAttachPress={handleAttachPress}
+              stagedMedia={stagedMedia}
+              clearStagedMedia={clearStagedMedia}
             />
-
-            {/* Optional: Display recording status */}
-            {isRecording && (
-              <View style={styles.recordingIndicator}>
-                <Text style={{ color: 'red' }}>Recording: {recordingDuration}s</Text>
-              </View>
+            {/* Display recording duration */}
+            {recording && (
+                <View style={styles.recordingIndicator}>
+                    <Text style={styles.recordingText}>Recording: {recordingDuration}s</Text>
+                </View>
             )}
           </View>
         </KeyboardAvoidingView>
@@ -1147,31 +1255,83 @@ export default function ChatScreen({ route, navigation }: ChatScreenProps) {
 }
 
 // --- Styles ---
-// TODO: Refactor styles into separate file or organize better
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-  },
-  safeAreaLoading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   backgroundImage: {
     flex: 1,
   },
   container: {
     flex: 1,
-    // backgroundColor: 'transparent', // Ensure container itself is transparent if using background image
+    // backgroundColor: 'transparent', // Ensure container is transparent for background
   },
-  keyboardAvoidingView: {
+  flexOne: {
     flex: 1,
   },
-  listContentContainer: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    // backgroundColor set dynamically
+    // borderBottomColor set dynamically
+  },
+  headerButton: {
+    padding: 5, // Add padding for easier tapping
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', // Center avatar and title
+    marginHorizontal: 10, // Add some space around the center content
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    borderWidth: 1, // Add border for visibility
+    // borderColor set dynamically
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    // color set dynamically
+    maxWidth: '80%', // Prevent title from overlapping buttons
+  },
+  guestBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // backgroundColor set dynamically
+  },
+  guestBannerText: {
+    fontSize: 13,
+    marginRight: 8,
+    // color set dynamically
+  },
+  guestBannerLink: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    // color set dynamically (primary)
+  },
+  messageList: {
+    flex: 1,
     paddingHorizontal: 10,
-    paddingTop: 10, // Add padding to top
-    paddingBottom: 5, // Add some padding at the bottom
+    // backgroundColor: 'transparent', // Ensure list is transparent
+  },
+  messageListContent: {
+    paddingVertical: 10, // Add padding to top and bottom of content
   },
   messageRow: {
     flexDirection: 'row',
@@ -1185,22 +1345,24 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   messageAvatarContainer: {
-    width: 36, // Fixed width for avatar container
+    width: 40, // Fixed width for avatar container
     marginRight: 8,
-    // No marginBottom needed if aligning items to flex-end
-  },
-  userAvatarPlaceholder: {
-    width: 36, // Match AI avatar width
-    marginLeft: 8,
+    alignSelf: 'flex-start', // Align avatar to the top of the row
+    paddingTop: 5, // Add padding to align with bubble text slightly better
   },
   messageAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
+    // borderColor set dynamically
+  },
+  userAvatarPlaceholder: {
+    width: 40, // Match AI avatar container width
+    marginLeft: 8,
   },
   messageBubble: {
-    maxWidth: '75%', // Max width for bubbles
+    maxWidth: '75%', // Limit bubble width
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 18,
@@ -1208,48 +1370,55 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 }, // iOS shadow
     shadowOpacity: 0.2,
     shadowRadius: 1,
+    // backgroundColor set dynamically
+    // shadowColor set dynamically
   },
   userMessageBubble: {
-    borderBottomRightRadius: 4, // User bubble tail
+    borderBottomRightRadius: 4, // Slightly flatten user bubble corner
+    // backgroundColor set dynamically
   },
   aiMessageBubble: {
-    borderBottomLeftRadius: 4, // AI bubble tail
-    // Removed shadow color here, applied in component based on theme
+    borderBottomLeftRadius: 4, // Slightly flatten AI bubble corner
+    // backgroundColor set dynamically
+    // borderWidth, borderColor set dynamically for light mode
   },
   messageText: {
     fontSize: 15,
-    lineHeight: 20, // Improve readability
+    lineHeight: 20,
+    // color set dynamically
   },
   messageTimestamp: {
     fontSize: 10,
-    marginTop: 4,
+    // color set dynamically
     alignSelf: 'flex-end', // Position timestamp to the right
+    marginTop: 4,
     opacity: 0.7,
   },
   inputAreaContainer: {
     borderTopWidth: 1,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 5, // Adjust padding for different platforms
-    paddingTop: 5,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10, // More padding for iOS home indicator area
+    paddingTop: 10,
     paddingHorizontal: 10,
+    // backgroundColor, borderTopColor set dynamically
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center', // Align items vertically
-    minHeight: 45, // Ensure a minimum height
   },
   textInput: {
     flex: 1,
-    minHeight: 40, // Minimum height for the text input
-    maxHeight: 120, // Limit the maximum height for multiline input
-    borderWidth: 1,
+    minHeight: 40, // Minimum height
+    maxHeight: 120, // Maximum height before scrolling
     borderRadius: 20,
+    borderWidth: 1,
     paddingHorizontal: 15,
     paddingVertical: 10, // Adjust vertical padding
     fontSize: 15,
-    marginHorizontal: 5, // Add some horizontal margin
+    marginHorizontal: 8, // Space between buttons and input
+    // backgroundColor, color, borderColor set dynamically
   },
   inputActionButton: {
-    padding: 8, // Add padding to increase tap area
+    padding: 8, // Hit area for buttons
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1259,164 +1428,145 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 5, // Add margin to separate from mic button
+    marginLeft: 8, // Space between mic and send
+    // backgroundColor set dynamically
   },
   sendButtonDisabled: {
     opacity: 0.5,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderBottomWidth: 1,
-    height: 60, // Fixed header height
-  },
-  headerButton: {
-    padding: 5, // Hit area for buttons
-  },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1, // Allow center to take up space
-    justifyContent: 'center', // Center items horizontally
-    marginHorizontal: 10, // Add margin around the center content
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    marginRight: 10,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    flexShrink: 1, // Allow title to shrink if needed
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '85%',
-    maxWidth: 400,
-    borderRadius: 10,
-    padding: 20,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 15,
-  },
-  themeListContainer: {
-    alignItems: 'center',
-  },
-  themePreviewContainer: {
-    margin: 5,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent', // Default transparent border
-    borderRadius: 8,
-    padding: 3,
-  },
-  themePreview: {
-    width: 80,
-    height: 120,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)', // Use theme color
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden', // Clip the background image
-  },
-  themePreviewImage: {
-      borderRadius: 6, // Apply border radius to the image itself
-  },
-  themeName: {
-    marginTop: 5,
-    fontSize: 12,
-  },
-  closeButton: {
-    marginTop: 20,
-    paddingVertical: 10,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
   typingIndicatorContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 15,
-      paddingVertical: 8,
-      // backgroundColor: 'transparent', // Inherit from parent or set explicitly
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 15, // Match message padding
+    // backgroundColor set dynamically (usually same as chat background)
   },
   typingIndicatorAvatar: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
       marginRight: 8,
       borderWidth: 1,
+      // borderColor set dynamically
   },
   typingIndicatorText: {
       fontSize: 13,
+      // color set dynamically (subText)
       marginRight: 4,
   },
   typingDotsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 2, // Small space after "typing" text
+    height: 10, // Fixed height for alignment
   },
   typingDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     marginHorizontal: 2,
+    // backgroundColor set dynamically (typingIndicator color)
   },
-  guestBanner: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 15,
-  },
-  guestBannerText: {
-      fontSize: 13,
-      marginRight: 5,
-  },
-  guestBannerLink: {
-      fontSize: 13,
-      fontWeight: '600',
-      textDecorationLine: 'underline',
-  },
+  // Staged Media Styles
   stagedMediaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     paddingVertical: 5,
-    borderBottomWidth: 1,
-    // Use dynamic border color
-    // borderBottomColor: colors.border, // Apply color dynamically where used
+    marginBottom: 5,
+    // backgroundColor: colors.inputBackground, // Use input background
+    borderRadius: 10,
   },
   stagedMediaText: {
-    fontSize: 13,
-    marginRight: 5,
+    fontSize: 12,
+    // color: colors.subText,
+    marginRight: 8,
   },
   clearMediaButton: {
-    padding: 2, // Small padding for tap area
+    marginLeft: 'auto', // Push to the right
+    padding: 2,
   },
+  // Recording Indicator Styles
   recordingIndicator: {
     position: 'absolute',
-    bottom: 60, // Adjust position as needed
+    bottom: 70, // Adjust position as needed
     left: 0,
     right: 0,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    paddingVertical: 3,
+    padding: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  recordingText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+  // Theme Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    // backgroundColor set dynamically (card)
+    maxHeight: '80%', // Limit modal height
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 20,
+    // color set dynamically (text)
+  },
+  themeListContainer: {
+    alignItems: 'center', // Center items if not filling width
+    paddingBottom: 10,
+  },
+  themeItem: {
+    margin: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderRadius: 10,
+    padding: 5,
+    // borderColor set dynamically
+    width: 120, // Fixed width for theme items
+  },
+  themePreview: {
+    width: 100,
+    height: 150, // Adjust aspect ratio as needed
+    borderRadius: 8,
+    marginBottom: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden', // Ensure border radius applies to image
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)', // Light border for preview itself
+  },
+  themePreviewImage: {
+    borderRadius: 8, // Apply border radius to the image itself
+  },
+  defaultThemePreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    // backgroundColor set dynamically (background)
+  },
+  themeName: {
+    fontSize: 12,
+    // color set dynamically (subText)
+  },
+  closeButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    // color set dynamically (closeButton color)
   },
 });

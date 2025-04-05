@@ -53,6 +53,7 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
   const [showCloseButton, setShowCloseButton] = useState(false);
   const closeButtonOpacity = useState(new Animated.Value(0))[0]; // Correct usage of useState for Animated.Value
 
+  // Effect for the countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
       if (seconds > 0) {
@@ -61,42 +62,45 @@ const DiscountOfferScreen = ({ route }: DiscountOfferScreenProps) => {
         setMinutes(minutes - 1);
         setSeconds(59);
       } else {
+        // Stop the timer when it reaches zero
         clearInterval(timer);
       }
     }, 1000);
 
-    // Show close button after delay
-    const closeButtonTimer = setTimeout(() => {
+    // Cleanup function to clear the interval when the component unmounts
+    // or when minutes/seconds change causing the effect to re-run (though it shouldn't if logic is correct)
+    return () => {
+      clearInterval(timer);
+    };
+  }, [minutes, seconds]); // Only depends on minutes and seconds
+
+  // Effect for the close button visibility timer (runs once on mount)
+  useEffect(() => {
+    let timerId: NodeJS.Timeout | null = null;
+
+    const showButton = () => {
       setShowCloseButton(true);
       Animated.timing(closeButtonOpacity, {
         toValue: 1,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: true, // Using native driver for opacity animation is generally safe
       }).start();
-    }, CLOSE_BUTTON_DELAY_PROD);
+    };
 
-    // For testing - show close button after 5 seconds in development
+    // Set the timer based on the environment
     if (__DEV__) {
-      // Clear the prod timer if the dev one is active
-      clearTimeout(closeButtonTimer);
-      const devCloseButtonTimer = setTimeout(() => {
-        setShowCloseButton(true);
-        Animated.timing(closeButtonOpacity, {
-          toValue: 1,
-          duration: ANIMATION_DURATION,
-          useNativeDriver: true,
-        }).start();
-      }, CLOSE_BUTTON_DELAY_DEV);
-      // Ensure dev timer is also cleared on unmount
-      return () => clearTimeout(devCloseButtonTimer);
+      timerId = setTimeout(showButton, CLOSE_BUTTON_DELAY_DEV); // 5 seconds in dev
+    } else {
+      timerId = setTimeout(showButton, CLOSE_BUTTON_DELAY_PROD); // 15 seconds in prod
     }
 
+    // Cleanup function to clear the timeout if the component unmounts before the timer fires
     return () => {
-      clearInterval(timer);
-      // Clear prod timer if it wasn't replaced by dev timer
-      clearTimeout(closeButtonTimer);
+      if (timerId) {
+        clearTimeout(timerId);
+      }
     };
-  }, [minutes, seconds, closeButtonOpacity]); // Added closeButtonOpacity back as it's used in the effect's Animated.timing
+  }, [closeButtonOpacity]); // Depends on closeButtonOpacity for the animation function reference
 
   const handleRedeemOffer = () => {
     if (fromCharacter && character) {
