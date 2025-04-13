@@ -549,6 +549,26 @@ export const ProfileScreen: React.FC<ProfileTabScreenProps> = ({ navigation: pro
           setNewBio={setNewBio}
         />
 
+        <TouchableOpacity
+          style={{
+            backgroundColor: colors.accent,
+            marginHorizontal: 16,
+            marginTop: 16,
+            marginBottom: 8,
+            borderRadius: 8,
+            paddingVertical: 14,
+            alignItems: 'center',
+          }}
+          onPress={() => navigation.getParent()?.navigate('SubscriptionScreen')}
+        >
+          <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+            Go Pro
+          </Text>
+          <Text style={{ color: '#FFFFFF', fontSize: 12, marginTop: 4 }}>
+            Unlock premium features
+          </Text>
+        </TouchableOpacity>
+
         <View style={styles.settingsContainer}>
           {SETTINGS_CATEGORIES.map((category) => (
             <SettingsSection

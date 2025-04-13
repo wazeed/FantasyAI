@@ -1,4 +1,5 @@
 #import "AppDelegate.h"
+#import <SuperwallKit/SuperwallKit-Swift.h>
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTLinkingManager.h>
@@ -27,6 +28,9 @@
     [(RCTRootView *)rootView setLoadingView:vc.view];
   }
   
+  // Initialize Superwall
+  [SuperwallKit.Superwall configureWithApiKey:@"pk_a6601ae4587cd2edb8b248286a03d0864a392817c225f6e5"];
+
   return result;
 }
 

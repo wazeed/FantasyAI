@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 // Removed unused Platform import
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import Superwall from '@superwall/react-native-superwall'; // Import Superwall
 // Removed loggingService import as it's not confirmed to exist/be exported
 
 // Constants for guest message tracking
@@ -20,7 +21,10 @@ interface AuthContextInterface {
   session: Session | null;
   isLoading: boolean; // Renamed for clarity (isLoading vs loading)
   isGuest: boolean;
+  isSubscribed: boolean; // Added subscription status
   guestMessageCount: number;
+  freeMessageCount: number; // Added free message count for logged-in non-subscribed users
+  credits: number | null; // Added credits state
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
@@ -29,9 +33,11 @@ interface AuthContextInterface {
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   skipAuth: () => void;
   incrementGuestMessageCount: () => Promise<void>;
+  incrementFreeMessageCount: () => Promise<void>; // Added function to increment free messages
   shouldShowSubscriptionOffer: () => Promise<boolean>;
   shouldShowDiscountOffer: () => Promise<boolean>;
   markDiscountOfferShown: () => Promise<void>; // Kept for API compatibility, though logic is now minimal
+  decrementCredits: (amount: number) => Promise<boolean>; // Added decrement function
 }
 
 const AuthContext = createContext<AuthContextInterface | undefined>(undefined);
@@ -41,8 +47,11 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Renamed state setter
   const [isGuest, setIsGuest] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState<boolean>(false); // Added subscription state
   const [guestMessageCount, setGuestMessageCount] = useState<number>(0);
+  const [freeMessageCount, setFreeMessageCount] = useState<number>(0); // Added free message count state
   const [offerShown, setOfferShown] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null); // Added credits state
   // Removed unused lastDiscountOfferDate state
 
   // Combined initialization useEffect
@@ -101,7 +110,65 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
             // If auth state changes to no session, guest status depends on whether user explicitly skips auth later
             if (newSession) {
                 setIsGuest(false);
-                // Reset guest-specific state if user logs in?
+                // Identify the user with Superwall and fetch/initialize user data
+                if (newSession.user) {
+                  Superwall.shared.identify({ userId: newSession.user.id });
+                  console.log(`Superwall identified user via shared instance: ${newSession.user.id}`);
+
+                  const userMetadata = newSession.user.user_metadata ?? {};
+                  let needsMetadataUpdate = false;
+                  const metadataUpdatePayload: { [key: string]: any } = {};
+
+                  // --- Subscription Status Logic ---
+                  // Assuming 'is_subscribed' is a boolean in metadata. Adjust if Superwall provides this differently.
+                  const currentSubscriptionStatus = !!userMetadata.is_subscribed;
+                  setIsSubscribed(currentSubscriptionStatus);
+                  console.log(`Subscription status loaded from metadata: ${currentSubscriptionStatus}`);
+
+                  // --- Free Message Count Logic ---
+                  if (!currentSubscriptionStatus) { // Only track free messages for non-subscribed users
+                    if (typeof userMetadata.free_message_count === 'number') {
+                      setFreeMessageCount(userMetadata.free_message_count);
+                      console.log(`Free message count loaded from metadata: ${userMetadata.free_message_count}`);
+                    } else {
+                      // Initialize free message count if not present
+                      const initialFreeCount = 0;
+                      setFreeMessageCount(initialFreeCount);
+                      metadataUpdatePayload.free_message_count = initialFreeCount;
+                      needsMetadataUpdate = true;
+                      console.log(`Initializing free message count to ${initialFreeCount} for user ${newSession.user.id}`);
+                    }
+                  } else {
+                    // Reset free message count for subscribed users (or just don't track)
+                    setFreeMessageCount(0); // Or perhaps Infinity? Setting to 0 for simplicity.
+                  }
+
+                  // --- Credit Initialization Logic ---
+                  if (typeof userMetadata.credits === 'number') {
+                    setCredits(userMetadata.credits);
+                    console.log(`Credits loaded from metadata: ${userMetadata.credits}`);
+                  } else {
+                    const initialCredits = 30; // Default credits if not present
+                    setCredits(initialCredits);
+                    metadataUpdatePayload.credits = initialCredits;
+                    needsMetadataUpdate = true;
+                    console.log(`Initializing credits to ${initialCredits} for user ${newSession.user.id}`);
+                  }
+
+                  // --- Update Supabase Metadata if Needed ---
+                  if (needsMetadataUpdate) {
+                    supabase.auth.updateUser({ data: metadataUpdatePayload })
+                      .then(({ error: updateError }) => {
+                        if (updateError) {
+                          console.error('Error saving initial user metadata to Supabase:', updateError);
+                          // Handle error: maybe revert local state?
+                        } else {
+                          console.log('Successfully saved initial user metadata to Supabase:', metadataUpdatePayload);
+                        }
+                      });
+                  }
+                }
+                // Reset guest-specific state when a user logs in
                 setGuestMessageCount(0);
                 setOfferShown(false);
                 AsyncStorage.removeItem(GUEST_MESSAGE_COUNT_KEY);
@@ -162,6 +229,8 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     setIsLoading(true);
     try {
       const { error } = await supabase.auth.signOut();
+      Superwall.shared.reset(); // Reset Superwall user identification
+      console.log('Superwall user reset via shared instance.'); // Optional: for debugging
       if (error) {
         console.error('Sign out error:', error);
         // Even if signout fails, attempt to clear local state as a fallback?
@@ -315,6 +384,58 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     // No state to set, no storage item to write for discount offer date.
   };
 
+  const decrementCredits = async (amount: number): Promise<boolean> => {
+    if (!user || credits === null || credits < amount) {
+      console.warn('Decrement credits check failed:', { userId: user?.id, currentCredits: credits, amount });
+      return false; // Cannot decrement if user is not logged in, credits are null, or insufficient credits
+    }
+
+    const newCredits = credits - amount;
+    setCredits(newCredits); // Optimistic update
+
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { credits: newCredits } });
+      if (error) {
+        console.error('Error updating credits in Supabase:', error);
+        // Revert optimistic update on failure
+        setCredits(credits);
+        return false;
+      }
+      console.log(`Credits successfully decremented by ${amount}. New balance: ${newCredits}`);
+      return true;
+    } catch (error) {
+      console.error('Unexpected error during credit decrement:', error);
+      // Revert optimistic update on unexpected error
+      setCredits(credits);
+      return false;
+    }
+  };
+
+  const incrementFreeMessageCount = async (): Promise<void> => {
+    // Only increment for logged-in, non-subscribed users
+    if (!user || isGuest || isSubscribed) return;
+
+    const newCount = freeMessageCount + 1;
+    setFreeMessageCount(newCount); // Optimistic update
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { free_message_count: newCount }
+      });
+      if (error) {
+        console.error('Error updating free message count in Supabase:', error);
+        // Revert optimistic update on failure
+        setFreeMessageCount(freeMessageCount);
+      } else {
+        console.log(`Free message count updated to ${newCount} for user ${user.id}`);
+      }
+    } catch (error) {
+      console.error('Unexpected error updating free message count:', error);
+      // Revert optimistic update
+      setFreeMessageCount(freeMessageCount);
+    }
+  };
+
   // Memoize the context value to prevent unnecessary re-renders of consumers
   // when the provider's internal state changes but the exposed value object reference remains the same.
   const value = useMemo(() => ({
@@ -322,7 +443,10 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     session,
     isLoading,
     isGuest,
+    isSubscribed, // Added
     guestMessageCount,
+    freeMessageCount, // Added
+    credits,
     signIn,
     signUp,
     signOut,
@@ -331,10 +455,12 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     signInWithGoogle,
     skipAuth,
     incrementGuestMessageCount,
+    incrementFreeMessageCount, // Added
     shouldShowSubscriptionOffer,
     shouldShowDiscountOffer,
     markDiscountOfferShown,
-  }), [user, session, isLoading, isGuest, guestMessageCount]); // Add dependencies
+    decrementCredits,
+  }), [user, session, isLoading, isGuest, isSubscribed, guestMessageCount, freeMessageCount, credits]); // Added isSubscribed, freeMessageCount to dependencies
 
   return (
     <AuthContext.Provider value={value}>

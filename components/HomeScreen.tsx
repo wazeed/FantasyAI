@@ -445,6 +445,8 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   // Removed unused: searchInputRef (no focus trigger shown), isRefreshing, toolAnimationRefs
 
+  // Function to present the paywall
+
   // Dynamic colors based on theme
   const colors = {
     background: isDarkMode ? '#121212' : '#FFFFFF',
@@ -492,6 +494,7 @@ export default function HomeScreen() {
           });
           return; // Stop execution if navigating to discount screen
         }
+        
       } catch (error) {
         // Log error but proceed to chat screen as a fallback
         console.error('Error checking/showing discount offer:', error);
@@ -549,65 +552,55 @@ export default function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-      {/* Header */}
-      <View style={[styles.header, isDarkMode ? styles.darkHeader : styles.lightHeader]}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.appName, isDarkMode ? styles.darkAppName : styles.lightAppName]}>
-            AI Assistants {/* Updated Header Text */}
-          </Text>
+        {/* Categories */}
+        <View style={styles.categoriesContainer}>
+          <FlatList
+            data={INITIAL_CATEGORIES} // Use initial categories data
+            renderItem={renderCategoryItem}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoriesList}
+          />
         </View>
-        {/* Removed unused profile icon */}
-      </View>
 
-      {/* Search Bar */}
-      <View style={[styles.searchContainer, isDarkMode ? styles.darkSearchContainer : styles.lightSearchContainer]}>
-        <Ionicons name="search-outline" size={18} color={colors.subText} style={styles.searchIconStyle} />
-        <TextInput
-          // ref={searchInputRef} // Ref removed as focus trigger is gone
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search AI assistants..."
-          placeholderTextColor={colors.subText}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search query">
-            <Ionicons name="close-circle" size={18} color={colors.subText} />
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Search Bar */}
+        <View style={[styles.searchContainer, isDarkMode ? styles.darkSearchContainer : styles.lightSearchContainer]}>
+          <Ionicons name="search-outline" size={18} color={colors.subText} style={styles.searchIconStyle} />
+          <TextInput
+            // ref={searchInputRef} // Ref removed as focus trigger is gone
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search AI assistants..."
+            placeholderTextColor={colors.subText}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search query">
+              <Ionicons name="close-circle" size={18} color={colors.subText} />
+            </TouchableOpacity>
+          )}
+        </View>
 
-      {/* Categories */}
-      <View style={styles.categoriesContainer}>
+        {/* Assistants List */}
         <FlatList
-          data={INITIAL_CATEGORIES} // Use initial categories data
-          renderItem={renderCategoryItem}
+          data={filteredAssistants}
+          renderItem={renderAssistantItem}
           keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesList}
+          numColumns={NUM_COLUMNS}
+          contentContainerStyle={styles.assistantsList} // Renamed from toolsList
+          showsVerticalScrollIndicator={false}
+          columnWrapperStyle={styles.columnWrapper}
+          ListEmptyComponent={ListEmptyComponent} // Added empty state component
+          keyboardShouldPersistTaps="handled" // Dismiss keyboard on tap outside input
         />
-      </View>
-
-      {/* Assistants List */}
-      <FlatList
-        data={filteredAssistants}
-        renderItem={renderAssistantItem}
-        keyExtractor={(item) => item.id}
-        numColumns={NUM_COLUMNS}
-        contentContainerStyle={styles.assistantsList} // Renamed from toolsList
-        showsVerticalScrollIndicator={false}
-        columnWrapperStyle={styles.columnWrapper}
-        ListEmptyComponent={ListEmptyComponent} // Added empty state component
-        keyboardShouldPersistTaps="handled" // Dismiss keyboard on tap outside input
-      />
-    </SafeAreaView>
+      </SafeAreaView>
   );
 }
 
@@ -618,13 +611,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: PADDING_HORIZONTAL,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    // Removed header styles as header is no longer used
   },
   darkHeader: {
     borderBottomColor: '#2A2A2A',
@@ -635,11 +622,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   headerLeft: {
+    // No longer used, but kept for compatibility
     flexDirection: 'row',
     alignItems: 'center',
   },
   appName: {
     fontSize: 20,
+    textAlign: 'center',
+    width: '100%',
     fontWeight: '600',
   },
   darkAppName: {
@@ -762,16 +752,15 @@ const styles = StyleSheet.create({
     minHeight: 200, // Ensure it has some minimum height
   },
   emptyStateTitle: {
-    fontSize: 18, // Adjusted size
-    fontWeight: '600', // Adjusted weight
-    marginBottom: 8, // Adjusted spacing
-    textAlign: 'center',
+   fontSize: 18, // Adjusted size
+   fontWeight: '600', // Adjusted weight
+   marginBottom: 8, // Adjusted spacing
+   textAlign: 'center',
   },
   emptyStateMessage: {
-    fontSize: 14, // Adjusted size
-    textAlign: 'center',
-    lineHeight: 20, // Adjusted line height
-    // color managed by theme
+   fontSize: 14, // Adjusted size
+   textAlign: 'center',
+   lineHeight: 20, // Adjusted line height
+   // color managed by theme
   },
-  // Removed unused styles: actionButton, actionButtonText, toolImageContainer, etc.
 });

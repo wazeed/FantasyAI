@@ -10,6 +10,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import { presentPaywall } from '../services/superwallService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { ThemeContext } from '../contexts/ThemeContext';
@@ -78,6 +79,10 @@ const getThemeColors = (isDarkMode: boolean) => ({
 const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { isDarkMode } = useContext(ThemeContext);
+
+  useEffect(() => {
+    presentPaywall('default_paywall');
+  }, []);
   const { isSpecialOffer = false, returnToCharacter } = route.params ?? {};
   
   // State
@@ -102,24 +107,8 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
   };
 
   const handleSubscribe = (planId: PlanId) => {
-    // Here would be code to handle subscription logic
-    Alert.alert(
-      "Subscription Success",
-      "You have successfully subscribed to the premium plan!",
-      [
-        {
-          text: "Continue",
-          onPress: () => {
-            if (returnToCharacter) {
-              // Navigate to chat with the character
-              navigation.navigate('Chat', { character: returnToCharacter });
-            } else {
-              navigation.navigate('MainTabs');
-            }
-          }
-        }
-      ]
-    );
+    // Trigger Superwall paywall
+    presentPaywall('default_paywall');
   };
 
   const toggleFreeTrial = () => {

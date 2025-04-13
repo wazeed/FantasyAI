@@ -16,5 +16,12 @@ config.resolver = {
   assetExts: resolver.assetExts.filter((ext) => ext !== 'svg'),
   sourceExts: [...resolver.sourceExts, 'svg'],
 };
+config.server = {
+  ...(config.server || {}),
+  experimental: {
+    enableBundlerBridge: true,
+  },
+};
 
+module.exports = config;
 module.exports = config;
