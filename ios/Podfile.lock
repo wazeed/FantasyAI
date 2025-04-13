@@ -2086,6 +2086,31 @@ PODS:
   - SDWebImageSVGCoder (1.7.0):
     - SDWebImage/Core (~> 5.6)
   - SocketRocket (0.7.1)
+  - Superscript (0.1.18)
+  - superwall-react-native (2.0.10):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.01.01.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SuperwallKit (= 4.0.6)
+    - Yoga
+  - SuperwallKit (4.0.6):
+    - Superscript (= 0.1.18)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2186,6 +2211,8 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
+  - "superwall-react-native (from `../node_modules/@superwall/react-native-superwall`)"
+  - SuperwallKit
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -2196,6 +2223,8 @@ SPEC REPOS:
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
     - SocketRocket
+    - Superscript
+    - SuperwallKit
 
 EXTERNAL SOURCES:
   boost:
@@ -2389,6 +2418,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-svg"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
+  superwall-react-native:
+    :path: "../node_modules/@superwall/react-native-superwall"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -2494,8 +2525,11 @@ SPEC CHECKSUMS:
   SDWebImageAVIFCoder: 00310d246aab3232ce77f1d8f0076f8c4b021d90
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  Superscript: 88a0e5e467fc986289f99e20e383232513c41ea9
+  superwall-react-native: 3d21d9213f65917c9ca67e86744c663d4dca004b
+  SuperwallKit: 18a4588702d5369880563d5a17cb967423f94c89
   Yoga: c53129290c005b3cb7bd2835f6b19987f610cf8b
 
-PODFILE CHECKSUM: bc266b6bf9395ea3001aa52dfd04f72d631be879
+PODFILE CHECKSUM: e630ef372ba824be82e8403e29edc33716aae6ac
 
 COCOAPODS: 1.16.2

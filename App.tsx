@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react'; // Removed unused useState
+import React, { useEffect } from 'react';
+import Superwall from '@superwall/react-native-superwall'; // Import Superwall
 import { NavigationContainer, DefaultTheme, DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator, BottomTabNavigationProp } from '@react-navigation/bottom-tabs'; // Keep BottomTabNavigationProp for ProfileTabWithReset
@@ -211,20 +212,22 @@ function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationP
 }
 
 const Navigation = () => {
-  const { user, loading, isGuest } = useAuth();
+  const { user, isLoading, isGuest } = useAuth(); // Corrected property name
   const { hasCompletedOnboarding } = useOnboarding();
   const { isDarkMode } = React.useContext(ThemeContext);
   const { width } = useWindowDimensions();
 
   useEffect(() => {
-    if (!loading) {
+    if (!isLoading) { // Use corrected property name
       SplashScreen.hideAsync().catch(e => console.warn('SplashScreen hide error:', e)); // Use console.warn
+      // Configure Superwall once loading is complete
+      Superwall.configure({ apiKey: 'pk_a6601ae4587cd2edb8b248286a03d0864a392817c225f6e5' });
     }
-  }, [loading]);
+  }, [isLoading]); // Use corrected property name in dependency array
 
   const theme = React.useMemo(() => isDarkMode ? DarkTheme : LightTheme, [isDarkMode]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" color={theme.colors.text} />
