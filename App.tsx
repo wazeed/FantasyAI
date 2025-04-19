@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import Superwall from '@superwall/react-native-superwall'; // Import Superwall
-import { NavigationContainer, DefaultTheme, DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
+import Superwall from '@superwall/react-native-superwall';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator, BottomTabNavigationProp } from '@react-navigation/bottom-tabs'; // Keep BottomTabNavigationProp for ProfileTabWithReset
+import { createBottomTabNavigator, BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
@@ -20,23 +20,23 @@ import LoginScreen from './components/LoginScreen';
 import EmailSignIn from './components/EmailSignIn';
 import HomeScreen from './components/HomeScreen';
 import ChatScreen from './components/ChatScreen';
-import { ProfileScreen } from './components/ProfileScreen'; // Use named import
-import { EditProfileScreen } from './components/EditProfileScreen'; // Use named import
-import SettingsScreen from './components/SettingsScreen'; // Assuming this uses default export
-import { PrivacySettingsScreen } from './components/PrivacySettingsScreen'; // Use named import
-import { NotificationSettingsScreen } from './components/NotificationSettingsScreen'; // Use named import
-import { SecuritySettingsScreen } from './components/SecuritySettingsScreen'; // Use named import
+import { ProfileScreen } from './components/ProfileScreen'; 
+import { EditProfileScreen } from './components/EditProfileScreen';
+import SettingsScreen from './components/SettingsScreen';
+import { PrivacySettingsScreen } from './components/PrivacySettingsScreen';
+import { NotificationSettingsScreen } from './components/NotificationSettingsScreen';
+import { SecuritySettingsScreen } from './components/SecuritySettingsScreen';
 import FAQsScreen from './components/FAQsScreen';
 import ReportProblemScreen from './components/ReportProblemScreen';
 import HelpCenterScreen from './components/HelpCenterScreen';
 import ContactUsScreen from './components/ContactUsScreen';
 import OnboardingScreen from './components/OnboardingScreen';
 import * as SplashScreen from 'expo-splash-screen';
-import { ThemeProvider, ThemeContext } from './contexts/ThemeContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import SubscriptionScreen from './components/SubscriptionScreen';
 import SubscriptionOfferScreen from './components/SubscriptionOfferScreen';
 import DiscountOfferScreen from './components/DiscountOfferScreen';
-import ChatListScreen from './components/ChatListScreen'; // Import the new component
+import ChatListScreen from './components/ChatListScreen';
 import TermsAndConditionsScreen from './components/TermsAndConditionsScreen';
 import PrivacyPolicyScreen from './components/PrivacyPolicyScreen';
 
@@ -48,7 +48,7 @@ type RootStackParamList = {
   EmailSignIn: { isSignUp?: boolean };
   MainTabs: undefined;
   Onboarding: undefined;
-  Chat: { character: any }; // Consider defining a Character type later
+  Chat: { character: any };
   EditProfile: undefined;
   Settings: undefined;
   PrivacySettings: undefined;
@@ -74,45 +74,16 @@ type MainTabsParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
-// Elegant light theme configuration
-const LightTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    primary: '#000000', // Black
-    background: '#FFFFFF', // White
-    card: '#FFFFFF', // White
-    text: '#000000', // Black
-    border: '#E0E0E0', // Light gray
-    notification: '#0070F3', // Accent blue
-  },
-};
-
-// Elegant dark theme configuration
-const DarkTheme = {
-  ...NavigationDarkTheme,
-  colors: {
-    ...NavigationDarkTheme.colors,
-    primary: '#FFFFFF', // White
-    background: '#121212', // Dark gray
-    card: '#1E1E1E', // Dark card
-    text: '#FFFFFF', // White
-    border: '#333333', // Dark gray
-    notification: '#0070F3', // Accent blue
-  },
-};
-
 // Bottom Tab Navigator
 function MainTabNavigator() {
-  const { isDarkMode } = React.useContext(ThemeContext);
-  const theme = isDarkMode ? DarkTheme : LightTheme;
+  const { colors, isDarkMode } = useTheme();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
-          // Define icon names based on route and focus state
-          let iconName: keyof typeof Ionicons.glyphMap; // Use keyof glyphMap for type safety
+          let iconName: keyof typeof Ionicons.glyphMap;
 
           switch (route.name) {
             case 'HomeTab':
@@ -125,42 +96,25 @@ function MainTabNavigator() {
               iconName = focused ? 'person' : 'person-outline';
               break;
             default:
-              iconName = 'alert-circle-outline'; // Fallback icon
+              iconName = 'alert-circle-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: colors.tabBarActive,
+        tabBarInactiveTintColor: colors.tabBarInactive,
         tabBarStyle: {
-          backgroundColor: theme.colors.card,
-          borderTopColor: theme.colors.border,
-          paddingTop: 5,
-          height: 60,
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.border,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          paddingBottom: 5,
+          // Add styles for label if needed
         },
-        // Remove all headers from tab screens - we'll handle them in the stack
-        headerShown: false,
       })}
     >
-      <Tab.Screen
-        name="HomeTab"
-        component={HomeScreen}
-        options={{ title: 'Home' }}
-      />
-      <Tab.Screen
-        name="ChatTab"
-        component={ChatListScreen}
-        options={{ title: 'Chat' }}
-      />
-      <Tab.Screen
-        name="ProfileTab"
-        component={ProfileTabWithReset}
-        options={{ title: 'Profile' }}
-      />
+      <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: 'Home' }} />
+      <Tab.Screen name="ChatTab" component={ChatListScreen} options={{ title: 'Chats' }} />
+      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -169,10 +123,9 @@ function MainTabNavigator() {
 type ProfileTabNavigationProp = BottomTabNavigationProp<MainTabsParamList, 'ProfileTab'>;
 
 // Wrapper for ProfileScreen that includes a development-only reset onboarding button.
-// TODO: Consider moving this to a separate file (e.g., components/profile/ProfileTabContainer.tsx) later.
 function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationProp }) {
   const { resetOnboarding } = useOnboarding();
-  const { isDarkMode } = React.useContext(ThemeContext);
+  const { colors, styles } = useTheme();
 
   const handleResetOnboarding = () => {
     Alert.alert(
@@ -196,15 +149,17 @@ function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationP
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Pass navigation prop; route prop might not be strictly necessary if ProfileScreen doesn't use it directly */}
-      <ProfileScreen navigation={navigation} route={{ key: 'ProfileTab', name: 'ProfileTab', params: undefined }} />
-      <View style={[styles.resetButtonContainer, { backgroundColor: isDarkMode ? DarkTheme.colors.background : LightTheme.colors.background, borderTopColor: isDarkMode ? DarkTheme.colors.border : LightTheme.colors.border }]}>
+    <View style={styles.container}>
+      <ProfileScreen 
+        navigation={navigation} 
+        route={{ key: 'ProfileTab', name: 'ProfileTab', params: undefined }} 
+      />
+      <View style={[localStyles.resetButtonContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.resetButton, { backgroundColor: isDarkMode ? DarkTheme.colors.card : LightTheme.colors.border }]}
+          style={[localStyles.resetButton, { backgroundColor: colors.card }]}
           onPress={handleResetOnboarding}
         >
-          <Text style={{ color: isDarkMode ? DarkTheme.colors.text : LightTheme.colors.text }}>Reset Onboarding (Dev Only)</Text>
+          <Text style={{ color: colors.text }}>Reset Onboarding (Dev Only)</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -212,217 +167,83 @@ function ProfileTabWithReset({ navigation }: { navigation: ProfileTabNavigationP
 }
 
 const Navigation = () => {
-  const { user, isLoading, isGuest } = useAuth(); // Corrected property name
-  const { hasCompletedOnboarding } = useOnboarding();
-  const { isDarkMode } = React.useContext(ThemeContext);
-  const { width } = useWindowDimensions();
+  const { user, isLoading } = useAuth();
+  const { hasCompletedOnboarding, isLoading: isOnboardingLoading } = useOnboarding();
+  const { isDarkMode, colors } = useTheme();
+  const [appIsReady, setAppIsReady] = React.useState(false);
 
   useEffect(() => {
-    if (!isLoading) { // Use corrected property name
-      SplashScreen.hideAsync().catch(e => console.warn('SplashScreen hide error:', e)); // Use console.warn
-      // Configure Superwall once loading is complete
-      Superwall.configure({ apiKey: 'pk_a6601ae4587cd2edb8b248286a03d0864a392817c225f6e5' });
+    async function prepare() {
+      try {
+        // Keep the splash screen visible while we fetch resources
+        // Add any other async tasks needed before hiding splash screen
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate loading
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        // Tell the application to render
+        setAppIsReady(true);
+        await SplashScreen.hideAsync();
+      }
     }
-  }, [isLoading]); // Use corrected property name in dependency array
 
-  const theme = React.useMemo(() => isDarkMode ? DarkTheme : LightTheme, [isDarkMode]);
+    prepare();
+  }, []);
 
-  if (isLoading) {
+  if (isLoading || isOnboardingLoading || !appIsReady) {
+    // Optionally return a loading indicator centered on the screen
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.text} />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  const commonHeaderStyle = {
-    headerStyle: {
-      backgroundColor: theme.colors.card,
-    },
-    headerTitleStyle: {
-      color: theme.colors.text,
-      fontWeight: '500' as const,
-      fontSize: Math.min(18, width * 0.045),
-    },
-    headerTintColor: theme.colors.text,
-    headerShadowVisible: false, // Prefer this over shadowOpacity/elevation
-    headerBackTitleVisible: false, // iOS only: hide the back button title
-  };
-
   return (
-    <NavigationContainer theme={theme}>
-      {/* Conditional rendering based on Auth and Onboarding state */}
-      {!user && !isGuest ? (
-        // === Authentication Flow ===
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.colors.background },
-            animation: 'fade',
-          }}
-        >
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="EmailSignIn" component={EmailSignIn} />
-        </Stack.Navigator>
-      ) : !hasCompletedOnboarding ? (
-        // === Onboarding Flow ===
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.colors.background },
-            animation: 'fade',
-          }}
-        >
+    <NavigationContainer>
+      {/* Set StatusBar style based on theme */}
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!hasCompletedOnboarding ? (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        </Stack.Navigator>
-      ) : (
-        // === Main Application Flow ===
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false, // Default to no header for the MainTabs
-            contentStyle: { backgroundColor: theme.colors.background },
-            animation: 'fade', // Consider 'slide_from_right' for standard screen transitions
-          }}
-        >
-          <Stack.Screen
-            name="MainTabs"
-            component={MainTabNavigator}
-            // No options needed as header is handled by the Stack default
-          />
-          <Stack.Screen
-            name="Chat"
-            component={ChatScreen}
-            options={{
-              // Header is handled within ChatScreen itself
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="EditProfile"
-            component={EditProfileScreen}
-            options={{
-              headerShown: true,
-              title: 'Edit Profile',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{
-              headerShown: true,
-              title: 'Settings',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="PrivacySettings"
-            component={PrivacySettingsScreen}
-            options={{
-              headerShown: true,
-              title: 'Privacy',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="NotificationSettings"
-            component={NotificationSettingsScreen}
-            options={{
-              headerShown: true,
-              title: 'Notifications',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="SecuritySettings"
-            component={SecuritySettingsScreen}
-            options={{
-              headerShown: true,
-              title: 'Security',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="FAQs"
-            component={FAQsScreen}
-            options={{
-              headerShown: true,
-              title: 'FAQs',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="ReportProblem"
-            component={ReportProblemScreen}
-            options={{
-              headerShown: true,
-              title: 'Report a Problem',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="HelpCenter"
-            component={HelpCenterScreen}
-            options={{
-              headerShown: true,
-              title: 'Help Center',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="ContactUs"
-            component={ContactUsScreen}
-            options={{
-              headerShown: true,
-              title: 'Contact Us',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="TermsAndConditions"
-            component={TermsAndConditionsScreen}
-            options={{
-              headerShown: true,
-              title: 'Terms & Conditions',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="PrivacyPolicy"
-            component={PrivacyPolicyScreen}
-            options={{
-              headerShown: true,
-              title: 'Privacy Policy',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="SubscriptionScreen"
-            component={SubscriptionScreen}
-            options={{
-              headerShown: true,
-              title: 'Premium Plans',
-              ...commonHeaderStyle,
-            }}
-          />
-          <Stack.Screen
-            name="SubscriptionOfferScreen"
-            component={SubscriptionOfferScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="DiscountOfferScreen"
-            component={DiscountOfferScreen}
-            options={{ headerShown: false }}
-          />
-        </Stack.Navigator>
-      )}
+        ) : !user ? (
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="EmailSignIn" component={EmailSignIn} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+            <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+            <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+            <Stack.Screen name="FAQs" component={FAQsScreen} />
+            <Stack.Screen name="ReportProblem" component={ReportProblemScreen} />
+            <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+            <Stack.Screen name="ContactUs" component={ContactUsScreen} />
+            <Stack.Screen name="SubscriptionScreen" component={SubscriptionScreen} />
+            <Stack.Screen name="SubscriptionOfferScreen" component={SubscriptionOfferScreen} />
+            <Stack.Screen name="DiscountOfferScreen" component={DiscountOfferScreen} />
+            <Stack.Screen name="TermsAndConditions" component={TermsAndConditionsScreen} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+          </>
+        )}
+      </Stack.Navigator>
     </NavigationContainer>
   );
 };
 
-// Root component providing context providers
+// Main App Component
 export default function App() {
+  useEffect(() => {
+    // Corrected Superwall configuration
+    Superwall.configure({ apiKey: 'YOUR_SUPERWALL_API_KEY' });
+    console.log('Superwall Initialized (Replace with your key)');
+  }, []);
+
   return (
     <ThemeProvider>
       <OnboardingProvider>
@@ -434,30 +255,81 @@ export default function App() {
   );
 }
 
-// Component rendering Navigation and StatusBar, consuming ThemeContext
+// Main App Content
 function AppContent() {
-  const { isDarkMode } = React.useContext(ThemeContext);
+  const { user, isGuest, isLoading } = useAuth(); // Add isGuest here
+  const { hasCompletedOnboarding, isLoading: isOnboardingLoading } = useOnboarding();
+  const { isDarkMode, colors } = useTheme();
+  const [appIsReady, setAppIsReady] = React.useState(false);
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        // Keep the splash screen visible while we fetch resources
+        // Add any other async tasks needed before hiding splash screen
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate loading
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        // Tell the application to render
+        setAppIsReady(true);
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    prepare();
+  }, []);
+
+  if (isLoading || isOnboardingLoading || !appIsReady) {
+    // Optionally return a loading indicator centered on the screen
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
-    <>
-      <Navigation />
-      <StatusBar style={isDarkMode ? "light" : "dark"} />
-    </>
+    <NavigationContainer>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!hasCompletedOnboarding ? (
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        ) : !user && !isGuest ? ( // Updated condition
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="EmailSignIn" component={EmailSignIn} />
+          </>
+        ) : ( // This covers both logged-in users and guests
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+            <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+            <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+            <Stack.Screen name="FAQs" component={FAQsScreen} />
+            <Stack.Screen name="ReportProblem" component={ReportProblemScreen} />
+            <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+            <Stack.Screen name="ContactUs" component={ContactUsScreen} />
+            <Stack.Screen name="SubscriptionScreen" component={SubscriptionScreen} />
+            <Stack.Screen name="SubscriptionOfferScreen" component={SubscriptionOfferScreen} />
+            <Stack.Screen name="DiscountOfferScreen" component={DiscountOfferScreen} />
+            <Stack.Screen name="TermsAndConditions" component={TermsAndConditionsScreen} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  // Styles used in this file
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+const localStyles = StyleSheet.create({
   // Styles for ProfileTabWithReset's dev button
   resetButtonContainer: {
     padding: 15,
     borderTopWidth: 1,
-    // Theme-dependent border/background colors applied inline using ThemeContext
   },
   resetButton: {
     paddingVertical: 10,
@@ -465,6 +337,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    // Theme-dependent background color applied inline using ThemeContext
+  },
+});
+
+// Add a simple centered style for the loading indicator
+const styles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

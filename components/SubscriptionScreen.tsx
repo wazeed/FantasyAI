@@ -1,4 +1,5 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSubscription } from '../contexts/SubscriptionContext';
 import {
   View,
   Text,
@@ -13,7 +14,7 @@ import {
 import { presentPaywall } from '../services/superwallService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { ThemeContext } from '../contexts/ThemeContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -40,7 +41,6 @@ interface Feature {
   title: string;
   description: string;
 }
-// Removed old type definition
 
 // --- Constants ---
 const YEARLY_PLAN_ID: PlanId = 'yearly';
@@ -55,43 +55,26 @@ const FEATURES_DATA: Feature[] = [
 ];
 const TERMS_TEXT = "By continuing, you agree to our Terms of Service and Privacy Policy. Subscriptions automatically renew until canceled.";
 
-// --- Theme Helper ---
-const getThemeColors = (isDarkMode: boolean) => ({
-  backgroundGradient: isDarkMode ? ['#121212', '#1E1E1E', '#2D2D2D'] as const : ['#F9FAFB', '#F3F4F6', '#E5E7EB'] as const,
-  text: isDarkMode ? '#FFFFFF' : '#333333',
-  subText: isDarkMode ? '#AAAAAA' : '#666666',
-  cardBgSelected: isDarkMode ? 'rgba(79, 70, 229, 0.2)' : 'rgba(79, 70, 229, 0.1)',
-  cardBgDefault: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-  primary: '#4F46E5', // Used for borders, savings text, switch track
-  accent: '#EC4899', // Used for offer badge
-  featureIcon: '#4F46E5', // Primary color for feature icons
-  switchThumb: '#f4f3f4',
-  switchTrackFalse: '#767577',
-  switchTrackTrueIos: '#3e3e3e',
-  continueButtonBg: '#4F46E5',
-  continueButtonText: '#FFFFFF',
-  offerBadgeText: '#FFFFFF',
-  selectedPlanBorder: '#4F46E5',
-});
-
 // --- Main Component ---
-
 const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { isDarkMode } = useContext(ThemeContext);
+  const { colors, styles: themeStyles, isDarkMode } = useTheme();
+  const { isSubscribed, isLoading, error } = useSubscription();
 
+  // Only present paywall on mount if not already subscribed
   useEffect(() => {
-    presentPaywall('default_paywall');
-  }, []);
+    if (isSubscribed === false) {
+      presentPaywall('default_paywall');
+    }
+    // Do not call if loading or already subscribed
+  }, [isSubscribed]);
+  
   const { isSpecialOffer = false, returnToCharacter } = route.params ?? {};
   
   // State
   const [isFreeTrial, setIsFreeTrial] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(YEARLY_PLAN_ID);
   
-  // Dynamic colors based on theme using helper
-  const colors = React.useMemo(() => getThemeColors(isDarkMode), [isDarkMode]);
-
   const handleClose = () => {
     if (returnToCharacter) {
       // Navigate to chat with the character
@@ -126,14 +109,52 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
   const yearlyPrice = isSpecialOffer ? yearlyPriceOriginal * 0.5 : yearlyPriceOriginal;
   const weeklyPrice = weeklyPriceOriginal;
 
+  // UI: loading, error, already subscribed, or show paywall
+  if (isLoading) {
+    return (
+      <View style={[themeStyles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: colors.text, fontSize: 18 }}>Checking subscription status...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[themeStyles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: colors.error, fontSize: 16, marginBottom: 12 }}>Error: {error}</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={themeStyles.primaryButton}>
+          <Text style={themeStyles.primaryButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (isSubscribed) {
+    // Already subscribed: show confirmation and hide paywall
+    return (
+      <View style={[themeStyles.container, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
+        <Ionicons name="checkmark-circle-outline" size={64} color={colors.primary} style={{ marginBottom: 16 }} />
+        <Text style={[themeStyles.headerText, { marginBottom: 8, textAlign: 'center' }]}>
+          You're a Premium Member!
+        </Text>
+        <Text style={[themeStyles.subheadingText, { textAlign: 'center', marginBottom: 24 }]}>
+          Thank you for subscribing. Enjoy unlimited access to all features and AI characters.
+        </Text>
+        <TouchableOpacity onPress={handleClose} style={themeStyles.primaryButton}>
+          <Text style={themeStyles.primaryButtonText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Not subscribed: show paywall
   return (
     <LinearGradient
-      colors={isDarkMode ? ['#121212', '#1E1E1E', '#2D2D2D'] : ['#F9FAFB', '#F3F4F6', '#E5E7EB']}
-      style={styles.container}
+      colors={[colors.background, colors.background, colors.background]}
+      style={themeStyles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          {/* Placeholder for potential back button if needed */}
           <View style={{ flex: 1 }} />
           <TouchableOpacity onPress={handleRestorePurchase} style={styles.restoreButton}>
             <Text style={[styles.restoreText, { color: colors.primary }]}>Restore Purchase</Text>
@@ -141,10 +162,10 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
         </View>
 
         <View style={styles.titleSection}>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text style={[themeStyles.headerText, { marginBottom: 8 }]}>
             Unlock Premium
           </Text>
-          <Text style={[styles.subtitle, { color: colors.subText }]}>
+          <Text style={themeStyles.subheadingText}>
             Get unlimited access to all features and AI characters
           </Text>
         </View>
@@ -160,6 +181,7 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
               description={feature.title === "Best Value"
                 ? (isSpecialOffer ? '50% discount for new users' : feature.description)
                 : feature.description}
+              themeStyles={themeStyles}
               colors={colors}
             />
           ))}
@@ -169,6 +191,7 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
         <FreeTrialToggle
           isFreeTrial={isFreeTrial}
           toggleFreeTrial={toggleFreeTrial}
+          themeStyles={themeStyles}
           colors={colors}
         />
 
@@ -184,6 +207,7 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
             isSelected={selectedPlan === YEARLY_PLAN_ID}
             isSpecialOffer={isSpecialOffer}
             onSelect={selectPlan}
+            themeStyles={themeStyles}
             colors={colors}
           />
 
@@ -196,22 +220,23 @@ const SubscriptionScreenComponent: React.FC<SubscriptionScreenProps> = ({ route 
             savingText="Flexible short-term option"
             isSelected={selectedPlan === WEEKLY_PLAN_ID}
             onSelect={selectPlan}
+            themeStyles={themeStyles}
             colors={colors}
           />
         </View>
 
         {/* Continue Button */}
         <TouchableOpacity
-          style={[styles.continueButton, { backgroundColor: colors.continueButtonBg }]}
+          style={themeStyles.primaryButton}
           onPress={() => handleSubscribe(selectedPlan)}
           activeOpacity={0.8}
         >
-          <Text style={[styles.continueButtonText, { color: colors.continueButtonText }]}>
+          <Text style={themeStyles.primaryButtonText}>
             {isFreeTrial ? 'Start Free Trial' : 'Continue'}
           </Text>
         </TouchableOpacity>
 
-        <Text style={[styles.termsText, { color: colors.subText }]}>
+        <Text style={[styles.termsText, { color: colors.secondaryText }]}>
           {TERMS_TEXT}
         </Text>
       </ScrollView>
@@ -225,15 +250,16 @@ interface FeatureItemProps {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
-  colors: ReturnType<typeof getThemeColors>;
+  themeStyles: any;
+  colors: any;
 }
 
-const FeatureItem: React.FC<FeatureItemProps> = React.memo(({ icon, title, description, colors }) => (
-  <View style={[styles.featureItem, { backgroundColor: colors.cardBgDefault }]}>
-    <Ionicons name={icon} size={24} color={colors.featureIcon} style={styles.featureIcon} />
+const FeatureItem: React.FC<FeatureItemProps> = React.memo(({ icon, title, description, themeStyles, colors }) => (
+  <View style={[styles.featureItem, { backgroundColor: colors.cardBg }]}>
+    <Ionicons name={icon} size={24} color={colors.primary} style={styles.featureIcon} />
     <View style={styles.featureTextContainer}>
       <Text style={[styles.featureTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.featureDescription, { color: colors.subText }]}>{description}</Text>
+      <Text style={[styles.featureDescription, { color: colors.secondaryText }]}>{description}</Text>
     </View>
   </View>
 ));
@@ -241,23 +267,24 @@ const FeatureItem: React.FC<FeatureItemProps> = React.memo(({ icon, title, descr
 interface FreeTrialToggleProps {
   isFreeTrial: boolean;
   toggleFreeTrial: () => void;
-  colors: ReturnType<typeof getThemeColors>;
+  themeStyles: any;
+  colors: any;
 }
 
-const FreeTrialToggle: React.FC<FreeTrialToggleProps> = React.memo(({ isFreeTrial, toggleFreeTrial, colors }) => (
-  <View style={[styles.freeTrialSection, { backgroundColor: colors.cardBgSelected }]}>
+const FreeTrialToggle: React.FC<FreeTrialToggleProps> = React.memo(({ isFreeTrial, toggleFreeTrial, themeStyles, colors }) => (
+  <View style={[styles.freeTrialSection, { backgroundColor: colors.tileBg }]}>
     <View style={styles.freeTrialTextContainer}>
       <Text style={[styles.freeTrialTitle, { color: colors.text }]}>7-Day Free Trial</Text>
-      <Text style={[styles.freeTrialDescription, { color: colors.subText }]}>
+      <Text style={[styles.freeTrialDescription, { color: colors.secondaryText }]}>
         Try all premium features for free
       </Text>
     </View>
     <Switch
       value={isFreeTrial}
       onValueChange={toggleFreeTrial}
-      trackColor={{ false: colors.switchTrackFalse, true: colors.primary }}
-      thumbColor={colors.switchThumb}
-      ios_backgroundColor={colors.switchTrackTrueIos}
+      trackColor={{ false: colors.border, true: colors.primary }}
+      thumbColor={isFreeTrial ? "#FFFFFF" : "#D1D5DB"}
+      ios_backgroundColor={colors.border}
     />
   </View>
 ));
@@ -272,55 +299,51 @@ interface PlanCardProps {
   isSelected: boolean;
   isSpecialOffer?: boolean;
   onSelect: (planId: PlanId) => void;
-  colors: ReturnType<typeof getThemeColors>;
+  themeStyles: any;
+  colors: any;
 }
 
 const PlanCard: React.FC<PlanCardProps> = React.memo(({
-  planId, title, originalPrice, price, billingCycle, savingText, isSelected, isSpecialOffer, onSelect, colors
+  planId, title, originalPrice, price, billingCycle, savingText, isSelected, isSpecialOffer, onSelect, themeStyles, colors
 }) => (
   <TouchableOpacity
     style={[
       styles.planCard,
-      isSelected && [styles.selectedPlan, { borderColor: colors.selectedPlanBorder }],
-      { backgroundColor: isSelected ? colors.cardBgSelected : colors.cardBgDefault }
+      isSelected && [styles.selectedPlan, { borderColor: colors.primary }],
+      { backgroundColor: isSelected ? colors.tileBg : colors.cardBg }
     ]}
     onPress={() => onSelect(planId)}
     activeOpacity={0.7}
   >
     <View style={styles.planHeader}>
       <Text style={[styles.planTitle, { color: colors.text }]}>{title}</Text>
-      {isSpecialOffer && planId === YEARLY_PLAN_ID && ( // Show badge only for yearly special offer
+      {isSpecialOffer && planId === YEARLY_PLAN_ID && (
         <View style={[styles.offerBadge, { backgroundColor: colors.accent }]}>
-          <Text style={[styles.offerBadgeText, { color: colors.offerBadgeText }]}>50% OFF</Text>
+          <Text style={[styles.offerBadgeText, { color: '#FFFFFF' }]}>50% OFF</Text>
         </View>
       )}
     </View>
     
     <View style={styles.priceContainer}>
       {originalPrice && (
-        <Text style={[styles.originalPrice, { color: colors.subText }]}>
+        <Text style={[styles.originalPrice, { color: colors.secondaryText }]}>
           ${originalPrice.toFixed(2)}
         </Text>
       )}
       <Text style={[styles.price, { color: colors.text }]}>
         ${price.toFixed(2)}
       </Text>
-      <Text style={[styles.billingCycle, { color: colors.subText }]}>{billingCycle}</Text>
+      <Text style={[styles.billingCycle, { color: colors.secondaryText }]}>{billingCycle}</Text>
     </View>
     
-    <Text style={[styles.planSaving, { color: planId === YEARLY_PLAN_ID ? colors.primary : colors.subText }]}>
+    <Text style={[styles.planSaving, { color: planId === YEARLY_PLAN_ID ? colors.primary : colors.secondaryText }]}>
       {savingText}
     </Text>
   </TouchableOpacity>
 ));
 
 // --- Styles ---
-// Styles remain largely the same
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   scrollContent: {
     flexGrow: 1,
     padding: 24,
@@ -343,15 +366,6 @@ const styles = StyleSheet.create({
   },
   titleSection: {
     marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 22,
   },
   featuresSection: {
     marginBottom: 24,
@@ -384,7 +398,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     padding: 16,
     borderRadius: 12,
-    backgroundColor: 'rgba(79, 70, 229, 0.1)',
   },
   freeTrialTextContainer: {
     flex: 1,
@@ -407,7 +420,6 @@ const styles = StyleSheet.create({
   },
   selectedPlan: {
     borderWidth: 2,
-    borderColor: '#4F46E5',
   },
   planHeader: {
     flexDirection: 'row',
@@ -420,13 +432,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   offerBadge: {
-    backgroundColor: '#EC4899',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   offerBadgeText: {
-    color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -450,18 +460,6 @@ const styles = StyleSheet.create({
   },
   planSaving: {
     fontSize: 14,
-  },
-  continueButton: {
-    backgroundColor: '#4F46E5',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  continueButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   termsText: {
     fontSize: 12,

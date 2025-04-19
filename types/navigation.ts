@@ -6,7 +6,23 @@ export type RootStackParamList = {
   EmailSignIn: { isSignUp?: boolean };
   MainTabs: undefined;
   Onboarding: undefined;
-  Chat: { character: any };
+  Chat: { 
+    character: {
+      id: number | string;
+      name: string;
+      description?: string; 
+      avatar: any;
+      tags?: string[];
+      category?: string;
+      openingMessage?: string;
+      exampleQuestions?: string[];
+      suggestedQuestions?: string[];
+      greeting?: string;
+      image_url?: string;
+      model?: string;
+      system_prompt?: string;
+    }
+  };
   EditProfile: undefined;
   Settings: undefined;
   PrivacySettings: undefined;
@@ -16,7 +32,7 @@ export type RootStackParamList = {
   ReportProblem: undefined;
   HelpCenter: undefined;
   ContactUs: undefined;
-  SubscriptionScreen: { isSpecialOffer?: boolean };
+  SubscriptionScreen: { isSpecialOffer?: boolean; returnToCharacter?: any };
   SubscriptionOfferScreen: undefined;
   DiscountOfferScreen: { fromCharacter?: boolean };
   TermsAndConditions: undefined;

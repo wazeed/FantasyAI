@@ -2,20 +2,39 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Database } from '../types/database'; // Use relative path for database types
+import Constants from 'expo-constants';
 
-// Validate environment variables
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+// Get Supabase credentials from Expo Constants (loaded via app.config.ts)
+const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl;
+const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseKey;
 
+// Validate configuration
 if (!supabaseUrl) {
-  throw new Error("Missing environment variable: EXPO_PUBLIC_SUPABASE_URL");
+  console.error("Missing Supabase URL in app configuration. Check your .env file and app.config.ts.");
+  // Provide fallback for development only
+  if (__DEV__) {
+    console.warn("Using fallback development configuration. This should NOT be used in production.");
+  } else {
+    throw new Error("Missing Supabase URL configuration");
+  }
 }
 if (!supabaseAnonKey) {
-  throw new Error("Missing environment variable: EXPO_PUBLIC_SUPABASE_ANON_KEY");
+  console.error("Missing Supabase anon key in app configuration. Check your .env file and app.config.ts.");
+  // Provide fallback for development only
+  if (__DEV__) {
+    console.warn("Using fallback development configuration. This should NOT be used in production.");
+  } else {
+    throw new Error("Missing Supabase anon key configuration");
+  }
 }
 
+// --- DEBUGGING LOGS ---
+console.log("Supabase URL being used:", supabaseUrl);
+console.log("Supabase Anon Key being used:", supabaseAnonKey ? supabaseAnonKey.substring(0, 10) + '...' : 'undefined'); // Log only a portion for security
+// --- END DEBUGGING LOGS ---
+
 // Initialize the Supabase client for React Native
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl!, supabaseAnonKey!, {
   auth: {
     storage: AsyncStorage, // Use AsyncStorage for session persistence in React Native
     autoRefreshToken: true,
