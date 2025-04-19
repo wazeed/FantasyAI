@@ -11,18 +11,48 @@ import {
   Animated,
   SafeAreaView,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeContext } from '../contexts/ThemeContext';
+import { useOnboarding } from '../contexts/OnboardingContext'; // Add this import
 import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { StackNavigationProp } from '@react-navigation/stack'; // Import StackNavigationProp
+
+// Define navigation param list for the Auth stack
+type AuthStackParamList = {
+  Login: undefined;
+  EmailSignIn: { isSignUp: boolean };
+  // Add other auth-related screens if needed
+};
+
+type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
 
 const { width, height } = Dimensions.get('window');
 
-export default function LoginScreen({ navigation }) {
+// Define colors based on the image
+const colors = {
+  background: '#0D0D0D', // Very dark background
+  textPrimary: '#FFFFFF',
+  textSecondary: '#AAAAAA', // Lighter grey for subtitle
+  buttonTextPrimary: '#000000', // Black text for social buttons
+  buttonBackgroundPrimary: '#FFFFFF',
+  guestButtonBorder: '#2ECC71', // Brighter green border
+  guestButtonText: '#2ECC71', // Brighter green text
+  linkText: '#2ECC71', // Brighter green for links
+  iconGoogle: '#DB4437',
+  iconApple: '#000000',
+  iconEmail: '#4285F4', // Example color, adjust if needed
+  errorText: '#FF3B30',
+  errorBackground: 'rgba(255, 0, 0, 0.1)',
+};
+
+export default function LoginScreen({ navigation }: { navigation: LoginScreenNavigationProp }) { // Add type annotation
   const { signInWithApple, signInWithGoogle, skipAuth } = useAuth();
   const { isDarkMode } = useContext(ThemeContext);
+  const { resetOnboarding } = useOnboarding(); // Add this line to get resetOnboarding function
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
@@ -100,31 +130,53 @@ export default function LoginScreen({ navigation }) {
     navigation.navigate('EmailSignIn', { isSignUp: true });
   };
 
+  // Handler to reset onboarding state (for developers)
+  const handleResetOnboarding = () => {
+    Alert.alert(
+      "Reset Onboarding",
+      "Are you sure you want to reset the onboarding process? You will see the onboarding screens again next time you open the app.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Reset",
+          onPress: async () => {
+            await resetOnboarding();
+            Alert.alert("Success", "Onboarding has been reset. Restart the app to see the onboarding screens.");
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
+
   return (
-    <LinearGradient 
-      colors={['#121212', '#1E1E1E']} 
-      style={styles.container}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-    >
+    // Use a View with solid background color instead of LinearGradient
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.contentContainer}>
           {/* Header Section */}
-          <Animated.View 
+          <Animated.View
             style={[
               styles.headerContent,
-              { 
+              {
                 opacity: fadeAnim,
                 transform: [{ translateY: slideAnim }]
               }
             ]}
           >
-            <Image 
-              source={require('../assets/logo.png')} 
-              style={styles.logo} 
-              resizeMode="contain"
-            />
+            {/* Consider adding a glow effect view behind the logo if possible */}
+            <View style={styles.logoContainer}>
+              <Image
+                // Using the crystal ball asset as requested
+                source={require('../assets/crystalball.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
             <Text style={styles.greeting}>Welcome to FantasyAI</Text>
             <Text style={styles.subGreeting}>Chat with your favorite characters</Text>
           </Animated.View>
@@ -135,160 +187,190 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
-          
+
           {/* Footer with buttons */}
-          <Animated.View 
+          <Animated.View
             style={[
               styles.footerContent,
-              { 
+              {
                 opacity: fadeAnim
               }
             ]}
           >
             {/* Social sign-in buttons */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.socialButton}
               onPress={handleGoogleSignIn}
               disabled={loading !== null}
             >
               {loading === 'google' ? (
-                <ActivityIndicator color="#121212" size="small" />
+                <ActivityIndicator color={colors.buttonTextPrimary} size="small" />
               ) : (
                 <>
-                  <Ionicons name="logo-google" size={22} color="#DB4437" style={styles.socialIcon} />
+                  {/* Using Ionicons, replace with actual Google logo image if needed */}
+                  <Ionicons name="logo-google" size={22} color={colors.iconGoogle} style={styles.socialIcon} />
                   <Text style={styles.socialButtonText}>Continue with Google</Text>
                 </>
               )}
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.socialButton}
               onPress={handleAppleSignIn}
               disabled={loading !== null}
             >
               {loading === 'apple' ? (
-                <ActivityIndicator color="#121212" size="small" />
+                <ActivityIndicator color={colors.buttonTextPrimary} size="small" />
               ) : (
                 <>
-                  <Ionicons name="logo-apple" size={22} color="#000000" style={styles.socialIcon} />
+                 {/* Using Ionicons, replace with actual Apple logo image if needed */}
+                  <Ionicons name="logo-apple" size={24} color={colors.iconApple} style={styles.socialIcon} />
                   <Text style={styles.socialButtonText}>Continue with Apple</Text>
                 </>
               )}
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.socialButton}
               onPress={handleEmailSignIn}
               disabled={loading !== null}
             >
-              <Ionicons name="mail" size={22} color="#4285F4" style={styles.socialIcon} />
+               {/* Using Ionicons for email */}
+              <Ionicons name="mail-outline" size={22} color={colors.iconEmail} style={styles.socialIcon} />
               <Text style={styles.socialButtonText}>Continue with Email</Text>
             </TouchableOpacity>
-            
+
             {/* Guest mode button */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.guestButton}
               onPress={handleSkipAuth}
               disabled={loading !== null}
             >
               {loading === 'skip' ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={colors.guestButtonText} size="small" />
               ) : (
                 <Text style={styles.guestButtonText}>Enter as Guest</Text>
               )}
             </TouchableOpacity>
-            
+
             {/* Sign up and forgot password links */}
             <View style={styles.linksContainer}>
               <TouchableOpacity onPress={navigateToSignUp}>
-                <Text style={styles.signupLink}>Sign up</Text>
+                <Text style={styles.linkText}>Sign up</Text>
               </TouchableOpacity>
-              
+
               <Text style={styles.linkSeparator}>•</Text>
-              
+
+              {/* Add navigation for Forgot Password if needed */}
               <TouchableOpacity>
-                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                <Text style={styles.linkText}>Forgot password?</Text>
               </TouchableOpacity>
             </View>
+            
+            {/* Developer option to reset onboarding */}
+            <TouchableOpacity 
+              style={styles.devOptionButton}
+              onPress={handleResetOnboarding}
+            >
+              <Text style={styles.devOptionText}>
+                <Ionicons name="refresh-outline" size={14} color={colors.textSecondary} /> Reset Onboarding (Dev)
+              </Text>
+            </TouchableOpacity>
           </Animated.View>
         </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View> // Close the main View container
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background, // Use defined background color
   },
   safeArea: {
     flex: 1,
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 20,
-    justifyContent: 'space-between',
+    paddingHorizontal: 25, // Slightly increased padding
+    justifyContent: 'space-between', // Keep space-between
+    paddingBottom: Platform.OS === 'ios' ? 10 : 20, // Adjust bottom padding
   },
   headerContent: {
     alignItems: 'center',
-    marginTop: height * 0.1,
+    marginTop: height * 0.12, // Adjust top margin
+    flex: 1, // Allow header to take available space
+    justifyContent: 'center', // Center content vertically within header space
+  },
+  logoContainer: { // Optional container for potential glow effect
+    marginBottom: 30, // Increased space below logo
+    // Add shadow/glow styles here if attempting effect
+    width: width * 0.35, // Adjust size as needed
+    height: width * 0.35,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
-    width: width * 0.4,
-    height: width * 0.4,
-    marginBottom: 20,
+    width: '100%',
+    height: '100%',
   },
   greeting: {
-    fontSize: 28,
+    fontSize: 32, // Slightly larger font size
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 10,
+    color: colors.textPrimary,
+    marginBottom: 8, // Reduced space
     textAlign: 'center',
   },
   subGreeting: {
     fontSize: 16,
-    color: '#BBBBBB',
+    color: colors.textSecondary, // Use defined secondary text color
     textAlign: 'center',
+    marginBottom: 20, // Add some margin below subtitle
   },
   footerContent: {
-    marginBottom: Platform.OS === 'ios' ? 30 : 20,
+    // Removed marginBottom, rely on contentContainer paddingBottom
     width: '100%',
+    paddingBottom: 10, // Add padding at the bottom of the footer itself
   },
   socialButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.buttonBackgroundPrimary, // Use defined button background
+    borderRadius: 25, // More rounded corners like the image
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    justifyContent: 'center', // Center content inside button
+    paddingVertical: 15, // Adjust padding
+    paddingHorizontal: 20,
+    marginBottom: 15, // Increased spacing between buttons
+    // Remove elevation/shadow if not desired
+    // elevation: 2,
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 1 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 2,
   },
   socialIcon: {
-    marginRight: 10,
+    marginRight: 12, // Adjust spacing
   },
   socialButtonText: {
-    color: '#121212',
+    color: colors.buttonTextPrimary, // Use defined button text color
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '500', // Medium weight
   },
   guestButton: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-    borderRadius: 12,
-    padding: 16,
+    borderWidth: 1.5, // Slightly thicker border
+    borderColor: colors.guestButtonBorder, // Use defined border color
+    borderRadius: 25, // Match social buttons rounding
+    paddingVertical: 15,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
+    justifyContent: 'center',
+    marginTop: 10, // Space above guest button
+    marginBottom: 25, // Space below guest button
   },
   guestButtonText: {
-    color: '#4CAF50',
+    color: colors.guestButtonText, // Use defined guest button text color
     fontSize: 16,
     fontWeight: '500',
   },
@@ -296,29 +378,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 10, // Ensure links aren't too close to the edge
   },
-  signupLink: {
-    color: '#4CAF50',
+  linkText: { // Combined style for both links
+    color: colors.linkText, // Use defined link color
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '500', // Medium weight
   },
   linkSeparator: {
-    color: '#BBBBBB',
-    marginHorizontal: 10,
-    fontSize: 10,
+    color: colors.textSecondary, // Use secondary text color for separator
+    marginHorizontal: 8,
+    fontSize: 14, // Match link font size
   },
-  forgotPasswordText: {
-    color: '#4CAF50',
-    fontSize: 14,
-  },
+  // Keep error styles
   errorContainer: {
-    margin: 20,
-    padding: 10,
-    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    marginHorizontal: 20,
+    marginBottom: 15, // Position error above buttons
+    padding: 12,
+    backgroundColor: colors.errorBackground,
     borderRadius: 8,
   },
   errorText: {
-    color: '#FF3B30',
+    color: colors.errorText,
     textAlign: 'center',
+    fontSize: 14,
   },
-}); 
+  // Add styles for dev options
+  devOptionButton: {
+    marginTop: 20,
+    alignSelf: 'center',
+    padding: 10,
+  },
+  devOptionText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    opacity: 0.7,
+    textAlign: 'center',
+  }
+});

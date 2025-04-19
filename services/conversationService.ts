@@ -12,14 +12,13 @@ type MessageInsert = Database['public']['Tables']['messages']['Insert'] & {
 };
 
 // Define a type for the recent chats list, used by the RPC function result
-// TODO: Uncomment this interface when the 'get_recent_chats' SQL function is defined and types are regenerated.
-// export interface RecentChatInfo {
-//   character_id: number;
-//   last_message_content: string | null;
-//   last_message_time: string | null;
-//   // Note: Add other relevant fields if the RPC function 'get_recent_chats' returns them
-//   // e.g., character_name, character_image_url if joined in the RPC function
-// }
+export interface RecentChatInfo {
+  character_id: number;
+  last_message_content: string | null;
+  last_message_time: string | null;
+  // Note: Add other relevant fields if the RPC function 'get_recent_chats' returns them
+  // e.g., character_name, character_image_url if joined in the RPC function
+}
 
 
 /**
@@ -49,36 +48,35 @@ export const getChatMessages = async (userId: string, characterId: number): Prom
   }
 };
 
-// TODO: Uncomment this function when the 'get_recent_chats' SQL function is defined and types are regenerated.
-// /**
-//  * Fetches recent chats for a user using the 'get_recent_chats' RPC function.
-//  * Shows the last message summary for each character interaction.
-//  * @param userId - The ID of the user.
-//  * @param limit - The maximum number of recent chats to retrieve (default: 20).
-//  * @returns A promise that resolves to an array of recent chat info, or an empty array on error.
-//  */
-// export const getRecentChats = async (userId: string, limit: number = 20): Promise<RecentChatInfo[]> => {
-//   try {
-//     // Ensure the RPC function 'get_recent_chats' exists in Supabase
-//     // and accepts 'p_user_id' and 'p_limit' parameters.
-//     // The 'never' type error here indicates the function is not defined in the generated types (types/database.ts)
-//     // Regenerate types after defining the function in SQL.
-//     const { data, error } = await supabase.rpc('get_recent_chats', { p_user_id: userId, p_limit: limit });
-//
-//     if (error) {
-//       console.error(`Error fetching recent chats via RPC for user ${userId}:`, error.message);
-//       return []; // Return empty array on RPC error
-//     }
-//
-//     // Assume the RPC function returns the correct structure matching RecentChatInfo[]
-//     // If the structure might vary, add more robust type checking here.
-//     return (data as RecentChatInfo[]) || [];
-//
-//   } catch (error) {
-//     console.error('Unexpected error in getRecentChats:', error instanceof Error ? error.message : error);
-//     return []; // Return empty array on unexpected errors
-//   }
-// };
+/**
+ * Fetches recent chats for a user using the 'get_recent_chats' RPC function.
+ * Shows the last message summary for each character interaction.
+ * @param userId - The ID of the user.
+ * @param limit - The maximum number of recent chats to retrieve (default: 20).
+ * @returns A promise that resolves to an array of recent chat info, or an empty array on error.
+ */
+export const getRecentChats = async (userId: string, limit: number = 20): Promise<RecentChatInfo[]> => {
+  try {
+    // Ensure the RPC function 'get_recent_chats' exists in Supabase
+    // and accepts 'p_user_id' and 'p_limit' parameters.
+    // The 'never' type error here indicates the function is not defined in the generated types (types/database.ts)
+    // Regenerate types after defining the function in SQL.
+    const { data, error } = await supabase.rpc('get_recent_chats', { p_user_id: userId, p_limit: limit });
+
+    if (error) {
+      console.error(`Error fetching recent chats via RPC for user ${userId}:`, error.message);
+      return []; // Return empty array on RPC error
+    }
+
+    // Assume the RPC function returns the correct structure matching RecentChatInfo[]
+    // If the structure might vary, add more robust type checking here.
+    return (data as RecentChatInfo[]) || [];
+
+  } catch (error) {
+    console.error('Unexpected error in getRecentChats:', error instanceof Error ? error.message : error);
+    return []; // Return empty array on unexpected errors
+  }
+};
 
 
 /**
